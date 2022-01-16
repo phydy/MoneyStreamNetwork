@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import {ISuperfluid, ISuperToken, ISuperApp, ISuperAgreement, SuperAppDefinitions} from "../supercon/interfaces/superfluid/ISuperfluid.sol";
@@ -26,14 +26,15 @@ contract FlowScource is SuperAppBase {
     ISuperToken private _acceptedToken; // accepted token
     address private _receiver;
     ITreeBudgetNFT treeNftContract;
+    IERC20 fdai;
 
 
     constructor(
         ISuperfluid host,
         IConstantFlowAgreementV1 cfa,
         ISuperToken acceptedToken,
-        address receiver,
-        ITreeBudgetNFT _addr
+        ITreeBudgetNFT _addr,
+        IERC20 _fdai
     ) {
         require(address(host) != address(0), "host is zero address");
         require(address(cfa) != address(0), "cfa is zero address");
@@ -47,8 +48,9 @@ contract FlowScource is SuperAppBase {
         _host = host;
         _cfa = cfa;
         _acceptedToken = acceptedToken;
-        _receiver = receiver;
+        _receiver = address(_addr);
         treeNftContract = _addr;
+        fdai =_fdai;
 
         uint256 configWord = SuperAppDefinitions.APP_LEVEL_FINAL |
             SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
@@ -64,9 +66,21 @@ contract FlowScource is SuperAppBase {
         return inflowRate;
         
     }
-    function fund(address to, int96 _flowRate) external {
+/*
+    function deposit(uint256 amount) {
+        _acceptedToken.TransferFrom(msg.sender, address(this), amount);
+         _acceptedToken.upgrade(amount);
+    }
+*/
+    function fund(address to, /*uint id,*/ int96 _flowRate) external {
         int96 total = (addressTotalOut[msg.sender] + _flowRate);
-        require(getAncestorFlow(msg.sender) >= total); 
+        //require(_acceptedToken.balanceOf(address(this)) > 0);
+        //_acceptedToken.TransferFrom(msg.sender, address(this), 200000000000000000000);
+        //require(getAncestorFlow(msg.sender) >= total);
+        //_acceptedToken.upgrade(2000000000000000000);
+        //_createFlow(address(treeNftContract), _flowRate);
+        _acceptedToken.transfer(address(treeNftContract), 100000000000000000000);
+
         uint256 id = createMother(to, _flowRate);
         AncestorIdFlowRate[msg.sender][id] = _flowRate;
         addressTotalOut[msg.sender] += _flowRate;
@@ -77,6 +91,20 @@ contract FlowScource is SuperAppBase {
         return treeNftContract.mintMother(to, _flowRate, data);
     }
 
+    function _createFlow(address to, int96 flowRate) internal {
+        if(to == address(this) || to == address(0)) return;
+        _host.callAgreement(
+            _cfa,
+            abi.encodeWithSelector(
+                _cfa.createFlow.selector,
+                _acceptedToken,
+                to,
+                flowRate,
+                new bytes(0) // placeholder
+            ),
+            "0x"
+        );
+    }
     
 
     function currentReceiver()

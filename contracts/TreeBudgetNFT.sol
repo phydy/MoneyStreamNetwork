@@ -33,7 +33,7 @@ import {
 
 
 
-contract TreeBudgetNFT is ERC1155, Ownable, SuperAppBase {
+contract TreeBudgetNFT is ERC1155, Ownable /*, SuperAppBase*/ {
     /*
     using Int96SafeMath for int96;
     using SafeMath for uint256;
@@ -250,20 +250,20 @@ contract TreeBudgetNFT is ERC1155, Ownable, SuperAppBase {
         uint256[] memory tokenId,//could cause transfer issues because is not an array
         uint256[] memory amount,
         bytes memory data
-    ) internal virtual override {
+    ) internal /*virtual*/ override {
         //blocks transfers to superApps - done for simplicity, but you could support super apps in a new version!
         require(!_host.isApp(ISuperApp(newReceiver)) || newReceiver == address(this), "New receiver can not be a superApp");
         //uint256 id = tokenId[0];
         //uint256 amount_ = amount[0];
         //int tokeNumber = 
-        super._beforeTokenTransfer(operator, oldReceiver, newReceiver, tokenId, amount, data);
+        //super._beforeTokenTransfer(operator, oldReceiver, newReceiver, tokenId, amount, data);
         // @dev delete flowRate of this token from old receiver
         // ignores minting case
         if (tokenId[0] == 0) {
             uint tokenNumber = tokenAddressId[tokenId[0]][oldReceiver];
             //should update the toke struct to change the owner
-            _reduceFlow(oldReceiver, idMotherInfo[tokenNumber].flowrate);
-            _increaseFlow(newReceiver, idMotherInfo[tokenNumber].flowrate);
+            //_reduceFlow(oldReceiver, idMotherInfo[tokenNumber].flowrate);
+            //_increaseFlow(newReceiver, idMotherInfo[tokenNumber].flowrate);
             idMotherInfo[tokenNumber].tokenOwner = newReceiver;
         }
         if (tokenId[0] > 0 && tokenId[0] < 3 ) {
@@ -291,14 +291,14 @@ contract TreeBudgetNFT is ERC1155, Ownable, SuperAppBase {
 
     function mintMother(address account, int96 _flowRate,bytes memory data)
         external
-        onlyOwner
+        /*onlyOwner*/
         returns(uint256)
     {   
         require(account != msg.sender);
         require(account != address(this));
         require(account != address(0));
         require(balanceOf(account, 0) == 0, "only one allowed");
-        require(checkFlowSource(msg.sender) >= _flowRate);
+        //require(checkFlowSource(msg.sender) >= _flowRate);
         _mint(account, 0, 1, data);
         addressMotherId[account] = IdToNumber[0];
 
@@ -506,12 +506,13 @@ contract TreeBudgetNFT is ERC1155, Ownable, SuperAppBase {
             "0x"
         );
     }
+/*
     function beforeAgreementCreated(
         ISuperToken superToken,
         address agreementClass,
-        bytes32 /* agreementId */,
-        bytes calldata /*agreementData*/,
-        bytes calldata /*ctx*/
+        bytes32 /* agreementId ,
+        bytes calldata /*agreementData,
+        bytes calldata /*ctx
     )
         external view override
         returns (bytes memory data)
@@ -525,8 +526,8 @@ contract TreeBudgetNFT is ERC1155, Ownable, SuperAppBase {
         ISuperToken superToken,
         address  agreementClass,
         bytes32 agreementId,
-        bytes calldata /*agreementData*/,
-        bytes calldata /*cbdata*/,
+        bytes calldata /*agreementData,
+        bytes calldata /*cbdata,
         bytes calldata ctx
     )
         external override
@@ -540,9 +541,9 @@ contract TreeBudgetNFT is ERC1155, Ownable, SuperAppBase {
     function beforeAgreementUpdated(
         ISuperToken superToken,
         address agreementClass,
-        bytes32 /* agreementId */,
-        bytes calldata /*agreementData*/,
-        bytes calldata /*ctx*/
+        bytes32 /* agreementId ,
+        bytes calldata /*agreementData,
+        bytes calldata /*ctx
     )
         external view override
         returns (bytes memory data)
@@ -556,8 +557,8 @@ contract TreeBudgetNFT is ERC1155, Ownable, SuperAppBase {
         ISuperToken superToken,
         address  agreementClass,
         bytes32 agreementId,
-        bytes calldata /*agreementData*/,
-        bytes calldata /*cbdata*/,
+        bytes calldata /*agreementData,
+        bytes calldata /*cbdata,
         bytes calldata ctx
     )
         external override
@@ -570,7 +571,7 @@ contract TreeBudgetNFT is ERC1155, Ownable, SuperAppBase {
     }
     
 
-/*
+
     function mintBatch(address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
         public
         onlyOwner
