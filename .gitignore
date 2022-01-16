@@ -4,4 +4,4 @@ __pycache__
 .hypothesis/
 build/
 reports/
-tests/
+tests/test_deployments.py
