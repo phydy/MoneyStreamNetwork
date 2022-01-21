@@ -76,6 +76,12 @@ networks:
     eth_usd_price_feed: '0xF9680D99D6C9589e2a93a78A04A279e509205945'
 dotenv: .env
 wallets:
+  from_dep: ${DEPLOYER}
+  from_mother: ${MOTHER}
+  from_child: ${CHILD}
+  from_gchild: ${GCHILD}
+  from__ggchild: S{GGCHILD}
+  from_buyer: ${BUYER}
   from_key: ${PRIVATE_KEY}
   from_mnemonic: ${MNEMONIC}
 

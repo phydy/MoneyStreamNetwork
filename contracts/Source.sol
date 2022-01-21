@@ -26,15 +26,13 @@ contract FlowScource is SuperAppBase {
     ISuperToken private _acceptedToken; // accepted token
     address private _receiver;
     ITreeBudgetNFT treeNftContract;
-    IERC20 fdai;
 
 
     constructor(
         ISuperfluid host,
         IConstantFlowAgreementV1 cfa,
         ISuperToken acceptedToken,
-        ITreeBudgetNFT _addr,
-        IERC20 _fdai
+        ITreeBudgetNFT _addr
     ) {
         require(address(host) != address(0), "host is zero address");
         require(address(cfa) != address(0), "cfa is zero address");
@@ -50,7 +48,6 @@ contract FlowScource is SuperAppBase {
         _acceptedToken = acceptedToken;
         _receiver = address(_addr);
         treeNftContract = _addr;
-        fdai =_fdai;
 
         uint256 configWord = SuperAppDefinitions.APP_LEVEL_FINAL |
             SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
@@ -75,22 +72,22 @@ contract FlowScource is SuperAppBase {
     function fund(address to, /*uint id,*/ int96 _flowRate) external {
         int96 total = (addressTotalOut[msg.sender] + _flowRate);
         //require(_acceptedToken.balanceOf(address(this)) > 0);
-        //_acceptedToken.TransferFrom(msg.sender, address(this), 200000000000000000000);
-        //require(getAncestorFlow(msg.sender) >= total);
-        //_acceptedToken.upgrade(2000000000000000000);
+        //require(getAncestorFlow(msg.sender) >= total); //will check that the flow from the sender is sufficient
         //_createFlow(address(treeNftContract), _flowRate);
-        _acceptedToken.transfer(address(treeNftContract), 100000000000000000000);
-
-        uint256 id = createMother(to, _flowRate);
+        //_acceptedToken.transfer(address(treeNftContract), 200000000000000000000);
+        _acceptedToken.transferFrom(msg.sender, address(treeNftContract), 200000000000000000000);//for testing and development purposes
+        uint256 id = treeNftContract.mintMother(to, _flowRate, "");
+        treeNftContract.addTokenSource(id, msg.sender);
         AncestorIdFlowRate[msg.sender][id] = _flowRate;
         addressTotalOut[msg.sender] += _flowRate;
 
-    } 
+    }
+/*
     function createMother(address to, int96 _flowRate) private returns (uint256){
         bytes memory data = "";
         return treeNftContract.mintMother(to, _flowRate, data);
     }
-
+*/
     function _createFlow(address to, int96 flowRate) internal {
         if(to == address(this) || to == address(0)) return;
         _host.callAgreement(
