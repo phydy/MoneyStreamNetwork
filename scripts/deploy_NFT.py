@@ -1,6 +1,5 @@
 from operator import ne
-from brownie import accounts, TreeBudgetNFT, FlowScource, network, config, convert
-from scripts.helpful_scripts import get_account
+from brownie import accounts, TreeBudgetNFT, FlowScource, MarketPlace, network, config, convert, interface
 
 
 host = convert.to_address("0x22ff293e14F1EC3A09B137e9e06084AFd63adDF9")
@@ -21,51 +20,243 @@ cfa_kovan = convert.to_address("0xECa8056809e7e8db04A8fF6e4E82cD889a46FE2F")
 ida_kovan = convert.to_address("0x556ba0b3296027Dd7BCEb603aE53dEc3Ac283d2b")
 daix_kovan = convert.to_address("0xe3cb950cb164a31c66e32c320a800d477019dcff")
 
+flow_to_mother = 100000000000000
+flow_to_child = 10000000000000
+flow_to_gchild = 1000000000000
+flow_to_ggchild = 100000000000
+
+address_deploy = convert.to_address("0xaC18157FFFdc96C9724eB1CF42eb05F8f70e645B")
+address_mother = convert.to_address("0xBCD9A216ba2c6346615B637Bb3A9CaC5117618e2")
+address_child = convert.to_address("0x955685Ad5B73CD9FF99e636862c319223B8f36fd")
+address_gchild = convert.to_address("0x633DBb3048CB220e2Cf046FA6FF0D279d09B7b60")
+address_ggchild = convert.to_address("0x7b35Fa78BDf45770FeF2b658153b9284f9af76e1")
+address_buyer = convert.to_address("0xC225c9Af6F51f0e82b5dA08e1dd58854F5e76a38")
+
+acceptedToken = interface.ISuperToken(daix_kovan)
+_cfa = interface.IConstantFlowAgreementV1(cfa_kovan)
 
 
+def get_account(role):
+    if role == 1:
+        return accounts.add(config["wallets"]["from_dep"])
+    if role ==2:
+        return accounts.add(config["wallets"]["from_mother"])
+    if role ==3:
+        return accounts.add(config["wallets"]["from_child"])
+    if role ==4:
+        return accounts.add(config["wallets"]["from_gchild"])
+    if role ==5:
+        return accounts.add(config["wallets"]["from_ggchild"])
+    elif role ==6:
+        return accounts.add(config["wallets"]["from_buyer"])
+
+def transferSuperTokens(sender, receiver, amount):
+    acceptedToken.transferFrom(
+        sender,
+        receiver,
+        convert.to_uint("100000000000000000000"),
+        {"from": get_account(1)}
+    )
 
 
 def deployment_path():
-    #account1 = accounts.load("0")
-    #account2 = accounts.load("1")
-    account = get_account() 
+    print("deploying nft contract...")
     nft_contract = (
         TreeBudgetNFT.deploy(
-            host_mumbai,
-            cfa_mumbai ,
-            ida_mumbai ,
-            daix_mumbai,
-            {"from": account}
+            host_kovan,
+            cfa_kovan ,
+            ida_kovan ,
+            daix_kovan,
+            {"from": get_account(1)}
        
         )
         if len(TreeBudgetNFT) <= 0
         else TreeBudgetNFT[-1]
     )
-    print(nft_contract.address)
+    print("nft contract deployed at: ")
     nft_address = nft_contract.address
+    print(nft_address)
+    print("deploying Source contract...")
     source_contract = (
         FlowScource.deploy(
-            host_mumbai,
-            cfa_mumbai,
-            daix_mumbai,
+            host_kovan,
+            cfa_kovan,
+            daix_kovan,
             nft_address,
-            fdai_mumbai,
-            {"from": account}
+            {"from": get_account(1)}
        
         )
         if len(FlowScource) <= 0
         else FlowScource[-1]
     )
     flowSource = source_contract.address
+    print("Source contract deployed at: ") 
     print(flowSource)
-    nft_contract.addFlowSource(flowSource, {"from": account}) #we add the flow source address to the nft contract
-    nft_contract.transferOwnership(flowSource, {"from": account})#we transfer ownership of the nft contract to the flowsource address to allow it to create mother tokens
+
+    print("deploying marketPlace")
+    market_contract = (MarketPlace.deploy(
+            nft_address,
+            daix_kovan,
+            {"from": get_account(1)}
+        )
+        if len(TreeBudgetNFT) <= 0
+        else TreeBudgetNFT[-1]
+    )
+    print("martket contract deployed")
+    market_address = market_contract.address
+    print("adding market")
+    nft_contract.addMarket(
+        market_address,
+        {"from": get_account(1)}
+    )
+    print("market address added")
+    print("adding flow source")
+    nft_contract.addFlowSource(
+        flowSource,
+        {"from": get_account(1)}
+    ) #we add the flow source address to the nft contract
+    #nft_contract.transferOwnership(flowSource, {"from": get_account(1)})#we transfer ownership of the nft contract to the flowsource address to allow it to create mother tokens
     print(source_contract.currentReceiver())
-    nft_contract.mintMother("0xBCD9A216ba2c6346615B637Bb3A9CaC5117618e2", 1, "", {"from": account})
-    source_contract.fund("0xBCD9A216ba2c6346615B637Bb3A9CaC5117618e2", 1, {"from": account})
-    source_contract.createMother("0x633DBb3048CB220e2Cf046FA6FF0D279d09B7b60", 1, {"from": account})
-    nft_contract.generateToken(1, 80000000000000000000, 1, 0, {"from": account})
-    nft_contract.mintChild("0xBCD9A216ba2c6346615B637Bb3A9CaC5117618e2", 0, "", {"from": account})
+    print("approving the flow source to spend super DAI")
+    acceptedToken.approve(
+        flowSource, convert.to_uint("200000000000000000000"),
+        {"from": get_account(1)}
+    ) #we approve the flow source to spend our DAIx
+    print("approved")
+    previous_balance = acceptedToken.balanceOf(nft_contract)
+    print("previous balance:") 
+    print(previous_balance)
+    print("minting mother token...")
+    source_contract.fund(
+        address_mother,
+        flow_to_mother,
+        {"from": get_account(1)}
+    )
+    current_balance = acceptedToken.balanceOf(nft_contract)
+
+    print("current balance:") 
+    print(current_balance)
+    print("getting mother token flow info...")
+    mother_flow_info = _cfa.getFlow(
+        daix_kovan,
+        nft_address,
+        address_mother
+    )
+    print(mother_flow_info)
+    print("This confirms that the mother token is active and working")
+    print("generating child token...")
+    nft_contract.generateToken(
+        1,
+        100000000000000000000,
+        flow_to_child,
+        36000,
+        {"from": get_account(2)}
+    )
+    print("child token generated")
+    print("minting Child Token...")
+    nft_contract.mintChild(
+        0,
+        address_child,
+        "",
+        {"from": get_account(3)}
+    )
+    print("child token minted")
+    print("getting child token flow info...")
+    child_flow_info = _cfa.getFlow(
+        daix_kovan,
+        nft_address,
+        address_child
+    )
+    print(child_flow_info)
+    print("new mother token info")
+    mother_flow_info = _cfa.getFlow(
+        daix_kovan,
+        nft_address,
+        address_mother
+    )
+    print(mother_flow_info)
+    print("generating grand child token...")
+    nft_contract.generateToken(
+        2,
+        1,
+        flow_to_gchild,
+        0,
+        {"from": get_account(3)}
+    )
+    print("minting grandchild token...")
+    nft_contract.mintGChild(
+        address_gchild,
+        0,
+        "",
+        {"from": get_account(4)}
+    )
+    print("grand child token minted")
+    print("getting grandchild token flow info...")
+    gchild_flow_info = _cfa.getFlow(
+        daix_kovan,
+        nft_address,
+        address_gchild
+    )
+    print(gchild_flow_info)
+
+    print("getting child token flow info...")
+    child_flow_info = _cfa.getFlow(
+        daix_kovan,
+        nft_address,
+        address_child
+    )
+    print(child_flow_info)
+
+    #print("transfering nft")
+    #nft_contract.safeTransferFrom(
+    #    address_child,
+    #    address_buyer,
+    #    1,
+    #    1,
+    #    "",
+    #    {"from": get_account(3)}
+    #)
+#
+    #print("transfered")
+    ##print("setting a token price")
+    #nft_contract.setTokenPrice(
+    #    1,
+    #    0,
+    #    100000000000000000000,
+    #    {"from": get_account(3)}
+    #)
+    #print("token price set")
+#
+    #print("buyer approving amount to spend")
+    #acceptedToken.approve(
+    #    market_address,
+    #    100000000000000000000,
+    #    {"from": get_account(6)}
+    #)
+    #print("approved")
+    #print("flow to buyer before tranfer")
+    #flow1_to_buyer = _cfa.getFlow(
+    #    daix_kovan,
+    #    nft_address,
+    #    address_buyer
+    #)
+    #print(flow1_to_buyer)
+    #print("Buying token")
+    #market_contract.buyToken(
+    #    1,
+    #    0,
+    #    {"from": get_account(6)}
+    #)
+    #print("token bought!")
+    #print("confirming flow to buyer")
+    #print("confirming")
+    ##flow_to_buyer = _cfa.getFlow(
+    ##    daix_kovan,
+    ##    nft_address,
+    ##    address_buyer
+    ##)
+    #print(flow_to_buyer)
+#
 def main():
     deployment_path()
 
