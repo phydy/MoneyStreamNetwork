@@ -99,8 +99,8 @@ def deployment_path():
             daix_kovan,
             {"from": get_account(1)}
         )
-        if len(TreeBudgetNFT) <= 0
-        else TreeBudgetNFT[-1]
+        if len(MarketPlace) <= 0
+        else MarketPlace[-1]
     )
     print("martket contract deployed")
     market_address = market_contract.address
