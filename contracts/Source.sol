@@ -17,7 +17,10 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SuperAppBase} from "../supercon/apps/SuperAppBase.sol";
 import {ITreeBudgetNFT} from "../interfaces/ITreeBudgetNFT.sol";
 
-contract FlowScource is SuperAppBase {
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
+
+contract FlowScource is SuperAppBase, ReentrancyGuard {
     mapping(address => mapping(uint => int96)) public AncestorIdFlowRate;
     mapping(address => int96) public addressTotalOut;
     mapping(address => uint) public stregth;
@@ -74,7 +77,6 @@ contract FlowScource is SuperAppBase {
         //require(_acceptedToken.balanceOf(address(this)) > 0);
         //require(getAncestorFlow(msg.sender) >= total); //will check that the flow from the sender is sufficient
         //_createFlow(address(treeNftContract), _flowRate);
-        //_acceptedToken.transfer(address(treeNftContract), 200000000000000000000);
         _acceptedToken.transferFrom(msg.sender, address(treeNftContract), 200000000000000000000);//for testing and development purposes
         uint256 id = treeNftContract.mintMother(to, _flowRate, "");
         treeNftContract.addTokenSource(id, msg.sender);

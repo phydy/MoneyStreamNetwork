@@ -56,10 +56,8 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
     mapping(address => uint) public addressGGchildId;
     
     mapping(uint256 => uint32) public tokenIdIndex;//the id of the token that owns the index
-    mapping(uint32 => uint256) public indexDuration;//when the iindex will expire
-    mapping(uint32 => uint256) public indexStartTime;//when the index was created
-    mapping(uint32 => uint256) public indexActualAmount;//the total to be distributed
-    mapping(uint32 => uint256) public indexRemainingShare;
+
+    mapping(uint32 => IndexInfo) public indexInformation;
     struct TokenInfo {
         address tokenParent;
         address tokenOwner;
@@ -88,6 +86,13 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         uint256 price;
         uint128 units;
 
+    }
+
+    struct IndexInfo {
+        uint duration;
+        uint startTime;
+        uint actualAmount;
+        uint remainingAmount;
     }
 
     mapping(uint => MotherInfo) private idMotherInfo;//mother tpken information
@@ -165,7 +170,7 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         uint256 amount
     ) external {
         require(token > 0 && token <3, "wrong token");
-        require(balanceOf(msg.sender, token) == 1, "no token"); //@dev: should own a mother token first
+        //require(balanceOf(msg.sender, token) == 1, "no token"); //@dev: should own a mother token first
         require(tokenIdInfo[token][id].tokenOwner == msg.sender);
         tokenIdInfo[token][id].forSale = true;
         tokenIdInfo[token][id].price = amount;
@@ -175,9 +180,11 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
             token,
             id,
             amount,
-            tokenIdInfo[token][id].flowrate,
-            duration
+            flowRate,
+            duration,
+            msg.sender
         );
+        setApprovalForAll(address(marketPlace), true);
     }
 
     function generateToken(
@@ -186,33 +193,38 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         int96 flowRate,
         uint256 _duration
     ) external returns(uint256) {
-        require(token_ !=0);
+        require(token_ == 1 || token_ == 2);
         require(balanceOf(msg.sender, (token_ - 1)) == 1, "have a preceding token");
         (, int96 outFlowRate, , ) = _cfa.getFlow(_acceptedToken, address(this), msg.sender);
         require(outFlowRate > flowRate);
         uint id = IdToNumber[token_];
-        tokenIdInfo[token_][id].tokenParent = msg.sender;
-        tokenIdInfo[token_][id].conceived = true;
-        tokenIdInfo[token_][id].flowrate = flowRate;
-        tokenIdInfo[token_][id].price = price;
+        tokenIdInfo[token_][id] = TokenInfo(
+            msg.sender,
+            address(0),
+            flowRate,
+            true,
+            false,
+            price,
+            _duration
+        );
         IdToNumber[token_]++;
-        /*
         uint amount = toUnint(flowRate);
         marketPlace.addTokenDetails(
             token_,
             id,
             amount,
             flowRate,
-            _duration
-        );*/
+            _duration,
+            msg.sender
+        );
         return id;
     }
 
     function distributeTokenDebt() external onlySource {
         uint32 index = uint32(addressGChildId[msg.sender]);
-        require(block.timestamp >= (indexStartTime[index] + indexDuration[index]));
-        _distribute(index, indexActualAmount[index]);
-        indexRemainingShare[index] = 0;
+        require(block.timestamp >= ((indexInformation[index].startTime) + indexInformation[index].duration));
+        _distribute(index, indexInformation[index].actualAmount);
+        indexInformation[index].remainingAmount = 0;
         //delete index
 
 
@@ -224,8 +236,8 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         int96 flowrate,
         uint256 expiry
     ) external {
-        require(balanceOf(msg.sender, 2) == 1); //one to own a gchild token
-        uint actualAmount = toUnint(flowrate) * expiry;
+        //require(balanceOf(msg.sender, 2) == 1); //one to own a gchild token
+        uint actualAmount = toUnint(flowrate) * expiry;//not for production
         uint gchilId = addressGChildId[msg.sender];
         tokenIdIndex[gchilId] = uint32(gchilId);
         uint32 index = uint32(gchilId);
@@ -241,10 +253,12 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
             new bytes(0) // user data
         );
         _reduceFlow(msg.sender, flowrate);
-        indexDuration[index] = expiry;
-        indexActualAmount[index] = actualAmount;
-        indexRemainingShare[index] = actualAmount;
-        indexStartTime[index] = block.timestamp;
+        indexInformation[index] = IndexInfo(
+            expiry,
+            actualAmount,
+            actualAmount,
+            block.timestamp
+        );
     }
 
     /*function setURI(string memory newuri) public onlyOwner {
@@ -257,42 +271,81 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         IdToNumber[_id] +=1;
     }
 
+    function _asSingletoAnArray(uint256 element) private pure returns (uint256[] memory) {
+        uint256[] memory array = new uint256[](1);
+        array[0] = element;
+
+        return array;
+    }
+
     function safeTransferFrom(
         address from,
         address to,
         uint256 id,
         uint256 amount,
-        bytes memory data
-    ) public virtual override {
-        require(
-            from == _msgSender() || isApprovedForAll(from, _msgSender()),
-            "ERC1155: caller is not owner nor approved"
-        );
-        require(id <= 3);
-        _safeTransferFrom(from, to, id, amount, data);
+        bytes calldata data
+    ) public override {
+        require(amount == 1);
         if (id == 0) {
             uint tokenNumber = addressMotherId[from];
             //should update the toke struct to change the owner
-            _deleteFlow(from,address(this));
+            _reduceFlow(from,idMotherInfo[tokenNumber].flowrate);
+            _increaseFlow(to, idMotherInfo[tokenNumber].flowrate);
+            idMotherInfo[tokenNumber].tokenOwner = to;
+        }
+        if (id == 1 ) {
+            uint tokenNumber = addressChildId[from];
+            _reduceFlow(from, tokenIdInfo[id][tokenNumber].flowrate);
+            // @dev create flowRate of this token to new receiver
+            // ignores return-to-issuer case 
+            _increaseFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
+            tokenIdInfo[id][tokenNumber].tokenOwner = to;
+        }
+        if (id == 2 ) {
+            uint tokenNumber = addressGChildId[from];
+            _reduceFlow(from, tokenIdInfo[id][tokenNumber].flowrate);
+            // @dev create flowRate of this token to new receiver
+            // ignores return-to-issuer case 
+            _increaseFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
+            tokenIdInfo[id][tokenNumber].tokenOwner = to;
+        }
+        super.safeTransferFrom(from, to, id, amount, data);
+
+    }
+/*
+    function _beforeTokenTransfer(
+        address operator,
+        address from,
+        address to,
+        uint256 id,
+        uint256 amount,
+        bytes memory data
+    ) internal virtual {
+        require(amount == 1);
+        super._beforeTokenTransfer(operator, from, to, _asSingletoAnArray(id), _asSingletoAnArray(amount), data);
+        if (id == 0) {
+            uint tokenNumber = addressMotherId[from];
+            //should update the toke struct to change the owner
+            //_reduceFlow(from,idMotherInfo[tokenNumber].flowrate);
             _createFlow(to, idMotherInfo[tokenNumber].flowrate);
             idMotherInfo[tokenNumber].tokenOwner = to;
         }
         if (id == 1 ) {
             uint tokenNumber = addressChildId[from];
-            _deleteFlow(from, address(this));
+            _reduceFlow(from, tokenIdInfo[id][tokenNumber].flowrate);
             // @dev create flowRate of this token to new receiver
             // ignores return-to-issuer case 
-            _createFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
+            _increaseFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
             tokenIdInfo[id][tokenNumber].tokenOwner = to;
         }
         if (id == 2 ) {
             uint tokenNumber = addressGChildId[from];
-            _deleteFlow(from, address(this));
+            _reduceFlow(from, tokenIdInfo[id][tokenNumber].flowrate);
             // @dev create flowRate of this token to new receiver
             // ignores return-to-issuer case 
-            _createFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
+            _increaseFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
             tokenIdInfo[id][tokenNumber].tokenOwner = to;
-        } else if (id == 3) {
+        } /*else if (id == 3) {
             //change receiver in index
             uint tokenNumber = addressGGchildId[from];
             uint motherNumber = addressGChildId[gGChildTokenIdInfo[tokenNumber].tokenParent];
@@ -304,7 +357,7 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         }
 
     }
-
+*/
     function checkFlowSource(address from) public view returns(int96) {
         (,int96 inflowRate,,) = _cfa.getFlow(_acceptedToken, from, address(this));
         return inflowRate;
@@ -329,10 +382,11 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         require(account != address(0));
         require(balanceOf(account, 0) == 0, "only one allowed");
         //require(checkFlowSource(msg.sender) >= _flowRate);
-        _mint(account, 0, 1, data);
+        idMotherInfo[addressMotherId[account]].flowrate = _flowRate;
         addressMotherId[account] = IdToNumber[0];
         _trackId(0, account);
         idMotherInfo[addressMotherId[account]].flowrate = _flowRate;
+        _mint(account, 0, 1, data);
         emit motherIssued(account, addressMotherId[account], msg.sender);
         _createFlow(account, _flowRate);
         return addressMotherId[account];
@@ -354,7 +408,7 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         mothersTokens[motherNumnber].push(id);
         tokenIdInfo[1][id].tokenOwner = newOwner;
         //_trackId(1, msg.sender);
-        //idMotherInfo[motherNumnber].flowrate -= tokenIdInfo[1][id].flowrate;
+        idMotherInfo[motherNumnber].flowrate -= tokenIdInfo[1][id].flowrate;
         _reduceFlow(flowOwner, tokenIdInfo[1][id].flowrate);
         _createFlow(newOwner, tokenIdInfo[1][id].flowrate);
 
@@ -379,7 +433,7 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         childsTokens[motherNumnber].push(id);
         tokenIdInfo[2][id].tokenOwner = newOwner;
         //_trackId(2, msg.sender);
-        //tokenIdInfo[1][motherNumnber].flowrate -= tokenIdInfo[2][id].flowrate;
+        tokenIdInfo[1][motherNumnber].flowrate -= tokenIdInfo[2][id].flowrate;
         _reduceFlow(flowOwner, tokenIdInfo[2][id].flowrate);
         _createFlow(newOwner, tokenIdInfo[2][id].flowrate);
 
@@ -393,7 +447,7 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         uint amount
     ) external /*onlyMarket*/ 
     {
-        require(indexRemainingShare[tokenIdIndex[token]] !=0 && amount <= indexRemainingShare[tokenIdIndex[token]], "index full");
+        require(indexInformation[tokenIdIndex[token]].remainingAmount !=0 && amount <= indexInformation[tokenIdIndex[token]].remainingAmount, "index full");
         address flowOwner = tokenIdInfo[2][token].tokenParent;
         //require(gGChildTokenIdInfo[token].conceived = true, "not available");
         uint motherNumnber = addressGChildId[flowOwner];
@@ -402,7 +456,7 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         gGChildTokenIdInfo[token].tokenOwner = newOwner;
         _mint(newOwner, 3, 1, "");
         updateIndex(motherNumnber, uint128(amount), newOwner);
-        indexRemainingShare[tokenIdIndex[token]] -= amount;
+        indexInformation[tokenIdIndex[token]].remainingAmount -= amount;
         gGChildTokenIdInfo[IdToNumber[3]].units = uint128(amount);
         //tokenIdInfo[2][motherNumnber].flowrate -=  gGChildTokenIdInfo[token].flowRate;
         //_reduceFlow(flowOwner, gGChildTokenIdInfo[token].flowRate);

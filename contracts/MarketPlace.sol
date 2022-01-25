@@ -2,16 +2,20 @@
 
 pragma solidity ^0.8.7;
 
-import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import "../ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {ITreeBudgetNFT} from "../interfaces/ITreeBudgetNFT.sol";
 import {
     ISuperToken
-} from "../supercon/interfaces/superfluid/ISuperfluid.sol";
+} from "../supercon/interfaces/superfluid/ISuperToken.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 
-contract MarketPlace {
+
+contract MarketPlace is ReentrancyGuard {
     ITreeBudgetNFT treeNFT;
     ISuperToken DAI;
 
@@ -56,18 +60,21 @@ contract MarketPlace {
         int96 flowRate_,
         uint duration,
         address seller
-    ) external 
+    ) external nonReentrant
     {
-        tokenIdInfo[token][id].price = price;
-        tokenIdInfo[token][id].flowRate = flowRate_;
-        tokenIdInfo[token][id].duration = duration;
-        tokenIdInfo[token][id].seller = seller;
+
+        tokenIdInfo[token][id] = Derivative(
+            price,
+            flowRate_,
+            duration,
+            seller
+        );
     }
 
     function mintToken(uint token, uint id) public {
-        require(token > 0 && token <3, "wrong token");
-        require(DAI.allowance(address(this), msg.sender)>=  tokenIdInfo[token][id].price);
-        DAI.transferFrom(msg.sender, tokenIdInfo[token][id].seller, tokenIdInfo[token][id].price);
+        require(token > 0 && token < 3, "wrong token");
+        //require(DAI.allowance(address(this), msg.sender)>=  tokenIdInfo[token][id].price);
+        //DAI.transferFrom(msg.sender, tokenIdInfo[token][id].seller, tokenIdInfo[token][id].price);
         bytes memory data = "";
         if (token == 1) {
             treeNFT.mintChild(
