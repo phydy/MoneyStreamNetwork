@@ -9,6 +9,7 @@ interface IMarketPlace {
         uint id,
         uint price,
         int96 flowRate_,
-        uint duration
+        uint duration,
+        address seller
     ) external;
 }

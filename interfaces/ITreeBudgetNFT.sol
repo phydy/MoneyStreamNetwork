@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
+
 interface ITreeBudgetNFT {
 
     function mintMother(
@@ -73,6 +74,7 @@ interface ITreeBudgetNFT {
         address to,
         uint256 id,
         uint256 amount,
-        bytes memory data
+        bytes calldata data
     ) external;
+
 }
