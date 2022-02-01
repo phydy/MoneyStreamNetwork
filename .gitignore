@@ -5,5 +5,4 @@ __pycache__
 build/
 reports/
 tests/test_deployments.py
-BudgetNFT.sol
-deploy_withMarket.py
+client/

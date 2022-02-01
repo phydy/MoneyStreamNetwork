@@ -10,6 +10,13 @@ interface IMarketPlace {
         uint price,
         int96 flowRate_,
         uint duration,
-        address seller
+        address seller,
+        bool _active
+    ) external;
+
+    function addIndex(
+        uint32 index,
+        uint256 duration,
+        uint256 actualAmount
     ) external;
 }

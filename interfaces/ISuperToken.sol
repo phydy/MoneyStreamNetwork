@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPLv3
 pragma solidity >=0.7.0;
 
-import { ISuperfluid } from "../supercon/interfaces/superfluid/ISuperfluid.sol";
-import { ISuperfluidToken } from "../supercon/interfaces/superfluid/ISuperfluidToken.sol";
-import { TokenInfo } from "../supercon/interfaces/tokens/TokenInfo.sol";
+import { ISuperfluid } from "@superfluid/interfaces/superfluid/ISuperfluid.sol";
+import { ISuperfluidToken } from "@superfluid/interfaces/superfluid/ISuperfluidToken.sol";
+import { TokenInfo } from "@superfluid/interfaces/tokens/TokenInfo.sol";
 import { IERC777 } from "@openzeppelin/contracts/token/ERC777/IERC777.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
