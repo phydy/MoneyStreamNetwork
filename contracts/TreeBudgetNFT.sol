@@ -1,5 +1,82 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.2;
+
+pragma solidity ^0.8.7;
+contract TreeFactory {
+
+    event Deployed(address addr, uint salt);
+
+    function getBytecode(
+        address _host,
+        address _cfa,
+        address _ida,
+        address _acceptedToken
+    ) public pure returns (bytes memory) {
+        bytes memory bytecode = type(TreeBudgetNFT).creationCode;
+
+        return abi.encodePacked(
+            bytecode,
+            abi.encode(
+                _host,
+                _cfa,
+                _ida,
+                _acceptedToken
+            )
+        );
+    }
+
+
+    function getAddress(bytes memory bytecode, uint _salt)
+        public
+        view
+        returns (address)
+    {
+        bytes32 hash = keccak256(
+            abi.encodePacked(bytes1(0xff), address(this), _salt, keccak256(bytecode))
+        );
+
+        // NOTE: cast last 20 bytes of hash to address
+        return address(uint160(uint(hash)));
+    }
+
+
+
+    // 3. Deploy the contract
+    // NOTE:
+    // Check the event log Deployed which contains the address of the deployed TestContract.
+    // The address in the log should equal the address computed from above.
+    function deploy(bytes memory bytecode, uint _salt) public payable {
+        address addr;
+
+        /*
+        NOTE: How to call create2
+
+        create2(v, p, n, s)
+        create new contract with code at memory p to p + n
+        and send v wei
+        and return the new address
+        where new address = first 20 bytes of keccak256(0xff + address(this) + s + keccak256(mem[p…(p+n)))
+              s = big-endian 256-bit value
+        */
+        assembly {
+            addr := create2(
+                callvalue(), // wei sent with current call
+                // Actual code starts after skipping the first 32 bytes
+                add(bytecode, 0x20),
+                mload(bytecode), // Load the size of code contained in the first 32 bytes
+                _salt // Salt from function arguments
+            )
+
+            if iszero(extcodesize(addr)) {
+                revert(0, 0)
+            }
+        }
+
+        emit Deployed(addr, _salt);
+    }
+}
+
+
+pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -11,26 +88,27 @@ import {
     ISuperApp,
     ISuperAgreement,
     SuperAppDefinitions
-} from "../supercon/interfaces/superfluid/ISuperfluid.sol";
+} from "@superfluid/interfaces/superfluid/ISuperfluid.sol";
 
-import {SuperAppBase} from "../supercon/apps/SuperAppBase.sol";
+//import {SuperAppBase} from "@superfluid/apps/SuperAppBase.sol";
 
 import {
     IConstantFlowAgreementV1
-} from "../supercon/interfaces/agreements/IConstantFlowAgreementV1.sol";
+} from "@superfluid/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
-import {
-    IInstantDistributionAgreementV1
-} from "../supercon/interfaces/agreements/IInstantDistributionAgreementV1.sol";
+//import {
+//    IInstantDistributionAgreementV1
+//} from "@superfluid/interfaces/agreements/IInstantDistributionAgreementV1.sol";
 
 import {IMarketPlace} from "../interfaces/IMarketPlace.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 
-contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
+contract TreeBudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
 
     ISuperfluid private _host; // host
     IConstantFlowAgreementV1 private _cfa; // the stored constant flow agreement class address
-    IInstantDistributionAgreementV1 private _ida;
+    //IInstantDistributionAgreementV1 private _ida;
     
     ISuperToken public _acceptedToken; // accepted token
     address flowSource;
@@ -55,7 +133,7 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
     mapping(address => uint) public addressGChildId;//an address to a Gchild token Id owned
     mapping(address => uint) public addressGGchildId;
     
-    mapping(uint256 => uint32) public tokenIdIndex;//the id of the token that owns the index
+    //mapping(uint256 => uint32) public tokenIdIndex;//the id of the token that owns the index
 
     mapping(uint32 => IndexInfo) public indexInformation;
     struct TokenInfo {
@@ -78,10 +156,8 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
     }
 
     struct GGChildInfo {
-        address tokenParent;
+        uint32 index;
         address tokenOwner;
-        int96 amount;
-        bool conceived;
         bool forSale;
         uint256 price;
         uint128 units;
@@ -132,31 +208,32 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         
         ISuperfluid host,
         IConstantFlowAgreementV1 cfa,
-        IInstantDistributionAgreementV1 ida,
+        //IInstantDistributionAgreementV1 ida,
         ISuperToken acceptedToken
-    ) ERC1155("") {
+    ) ERC1155("STREAM NETWORK") {
         
         require(address(host) != address(0));
         require(address(cfa) != address(0));
         require(address(acceptedToken) != address(0));
         _host = host;
         _cfa = cfa;
-        _ida =ida;
+        //_ida =ida;
         _acceptedToken = acceptedToken;
-
+/*
         uint256 configWord =
             SuperAppDefinitions.APP_LEVEL_FINAL |
             SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP |
             SuperAppDefinitions.AFTER_AGREEMENT_TERMINATED_NOOP;
 
         _host.registerApp(configWord);
+    */
     }
 
-    function addFlowSource(address _flowSource) external {
+    function addFlowSource(address _flowSource) external onlyOwner {
         flowSource = _flowSource;
     }
 
-    function addMarket(IMarketPlace _market) external {
+    function addMarket(IMarketPlace _market) external onlyOwner {
         marketPlace = _market;
     }
 
@@ -168,9 +245,8 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         uint256 token,
         uint256 id,
         uint256 amount
-    ) external {
+    ) external nonReentrant {
         require(token > 0 && token <3, "wrong token");
-        //require(balanceOf(msg.sender, token) == 1, "no token"); //@dev: should own a mother token first
         require(tokenIdInfo[token][id].tokenOwner == msg.sender);
         tokenIdInfo[token][id].forSale = true;
         tokenIdInfo[token][id].price = amount;
@@ -182,9 +258,9 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
             amount,
             flowRate,
             duration,
-            msg.sender
+            msg.sender,
+            true
         );
-        setApprovalForAll(address(marketPlace), true);
     }
 
     function generateToken(
@@ -215,21 +291,20 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
             amount,
             flowRate,
             _duration,
-            msg.sender
+            msg.sender,
+            false
         );
         return id;
     }
-
+/*
     function distributeTokenDebt() external onlySource {
         uint32 index = uint32(addressGChildId[msg.sender]);
         require(block.timestamp >= ((indexInformation[index].startTime) + indexInformation[index].duration));
         _distribute(index, indexInformation[index].actualAmount);
         indexInformation[index].remainingAmount = 0;
         //delete index
-
-
     }
-
+/*
     function createGGchildTokenIndex(
         //uint256 actualAmount,
         //uint256 id,
@@ -239,7 +314,7 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         //require(balanceOf(msg.sender, 2) == 1); //one to own a gchild token
         uint actualAmount = toUnint(flowrate) * expiry;//not for production
         uint gchilId = addressGChildId[msg.sender];
-        tokenIdIndex[gchilId] = uint32(gchilId);
+        //tokenIdIndex[gchilId] = uint32(gchilId);
         uint32 index = uint32(gchilId);
         //require(actualAmount%distributeAmount == 0, "uneven distribution");
         _host.callAgreement(
@@ -259,23 +334,22 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
             actualAmount,
             block.timestamp
         );
+        marketPlace.addIndex(
+            index,
+            expiry,
+            actualAmount
+        );
     }
+    */
 
-    /*function setURI(string memory newuri) public onlyOwner {
+    function setURI(string memory newuri) public onlyOwner {
         _setURI(newuri);
-    }*/
-
+    }
+    
     function _trackId(uint256 _id, address idOwner) internal {
         uint secondId = IdToNumber[_id];//the id of the token monted ie MOTHER, CHILD or GRANDCHILD
         idMotherInfo[secondId].tokenOwner = idOwner;
         IdToNumber[_id] +=1;
-    }
-
-    function _asSingletoAnArray(uint256 element) private pure returns (uint256[] memory) {
-        uint256[] memory array = new uint256[](1);
-        array[0] = element;
-
-        return array;
     }
 
     function safeTransferFrom(
@@ -285,67 +359,37 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         uint256 amount,
         bytes calldata data
     ) public override {
+        require(id < 4);
         require(amount == 1);
         if (id == 0) {
             uint tokenNumber = addressMotherId[from];
-            //should update the toke struct to change the owner
             _reduceFlow(from,idMotherInfo[tokenNumber].flowrate);
             _increaseFlow(to, idMotherInfo[tokenNumber].flowrate);
             idMotherInfo[tokenNumber].tokenOwner = to;
+            addressMotherId[to] = tokenNumber;
+            delete addressMotherId[from];
         }
         if (id == 1 ) {
             uint tokenNumber = addressChildId[from];
             _reduceFlow(from, tokenIdInfo[id][tokenNumber].flowrate);
-            // @dev create flowRate of this token to new receiver
-            // ignores return-to-issuer case 
             _increaseFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
             tokenIdInfo[id][tokenNumber].tokenOwner = to;
+            addressChildId[to] = tokenNumber;
+            delete addressChildId[from];
         }
         if (id == 2 ) {
             uint tokenNumber = addressGChildId[from];
             _reduceFlow(from, tokenIdInfo[id][tokenNumber].flowrate);
-            // @dev create flowRate of this token to new receiver
-            // ignores return-to-issuer case 
             _increaseFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
             tokenIdInfo[id][tokenNumber].tokenOwner = to;
+            addressGChildId[to] = tokenNumber;
+            delete addressGChildId[from];
         }
         super.safeTransferFrom(from, to, id, amount, data);
 
     }
 /*
-    function _beforeTokenTransfer(
-        address operator,
-        address from,
-        address to,
-        uint256 id,
-        uint256 amount,
-        bytes memory data
-    ) internal virtual {
-        require(amount == 1);
-        super._beforeTokenTransfer(operator, from, to, _asSingletoAnArray(id), _asSingletoAnArray(amount), data);
-        if (id == 0) {
-            uint tokenNumber = addressMotherId[from];
-            //should update the toke struct to change the owner
-            //_reduceFlow(from,idMotherInfo[tokenNumber].flowrate);
-            _createFlow(to, idMotherInfo[tokenNumber].flowrate);
-            idMotherInfo[tokenNumber].tokenOwner = to;
-        }
-        if (id == 1 ) {
-            uint tokenNumber = addressChildId[from];
-            _reduceFlow(from, tokenIdInfo[id][tokenNumber].flowrate);
-            // @dev create flowRate of this token to new receiver
-            // ignores return-to-issuer case 
-            _increaseFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
-            tokenIdInfo[id][tokenNumber].tokenOwner = to;
-        }
-        if (id == 2 ) {
-            uint tokenNumber = addressGChildId[from];
-            _reduceFlow(from, tokenIdInfo[id][tokenNumber].flowrate);
-            // @dev create flowRate of this token to new receiver
-            // ignores return-to-issuer case 
-            _increaseFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
-            tokenIdInfo[id][tokenNumber].tokenOwner = to;
-        } /*else if (id == 3) {
+  {
             //change receiver in index
             uint tokenNumber = addressGGchildId[from];
             uint motherNumber = addressGChildId[gGChildTokenIdInfo[tokenNumber].tokenParent];
@@ -353,8 +397,6 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
             updateIndex(uint32(motherNumber), units , to);
             updateIndex(uint32(motherNumber), 0, from);
             gGChildTokenIdInfo[tokenNumber].tokenOwner = to;
-
-        }
 
     }
 */
@@ -374,7 +416,7 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         bytes memory data
     )
         external
-        /*onlyOwner*/
+        onlySource
         returns(uint256)
     {   
         require(account != msg.sender);
@@ -397,7 +439,7 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         address newOwner,
         bytes memory data
     )
-        external /*onlyMarket*/
+        external onlyMarket nonReentrant
     {   require(tokenIdInfo[1][id].conceived == true, "not available");
         address flowOwner = tokenIdInfo[1][id].tokenParent;
         uint motherNumnber = addressMotherId[flowOwner];
@@ -421,13 +463,17 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         uint id,
         bytes memory data
     )
-        external /*onlyMarket*/
+        external onlyMarket nonReentrant
     {   
         require(tokenIdInfo[2][id].conceived == true, "not available");
         address flowOwner = tokenIdInfo[2][id].tokenParent;
         uint motherNumnber = addressChildId[flowOwner];
         require(newOwner != flowOwner);
-        require(tokenIdInfo[1][motherNumnber].flowrate > tokenIdInfo[2][id].flowrate, "isuficient fr"); //@dev: flowrate from mother should not be zero
+        require(
+            tokenIdInfo[1][motherNumnber].flowrate
+            >
+            tokenIdInfo[2][id].flowrate, "isuficient fr"
+        ); //@dev: flowrate from mother should not be zero
         _mint(newOwner, 2, 1, data);
         addressGChildId[newOwner] = id;
         childsTokens[motherNumnber].push(id);
@@ -440,27 +486,29 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         emit childIssued(flowOwner, addressGChildId[newOwner], newOwner);
         
     }
-
+/*
     function mintGreatGChild(
         address newOwner,
         uint token,
         uint amount
-    ) external /*onlyMarket*/ 
+    ) external onlyMarket nonReentrant
     {
-        require(indexInformation[tokenIdIndex[token]].remainingAmount !=0 && amount <= indexInformation[tokenIdIndex[token]].remainingAmount, "index full");
+        require(
+            indexInformation[uint32(token)].remainingAmount > 0
+            &&
+            amount <= indexInformation[uint32(token)].remainingAmount,
+            "index full"
+        );
+        uint token_ = IdToNumber[3];
         address flowOwner = tokenIdInfo[2][token].tokenParent;
-        //require(gGChildTokenIdInfo[token].conceived = true, "not available");
-        uint motherNumnber = addressGChildId[flowOwner];
-        addressGGchildId[newOwner] = token;
-        gChildsTokens[motherNumnber].push(token);
-        gGChildTokenIdInfo[token].tokenOwner = newOwner;
+        //uint motherNumnber = addressGChildId[flowOwner];
+        addressGGchildId[newOwner] = token_;
+        gChildsTokens[token].push(token_);
+        gGChildTokenIdInfo[token_].tokenOwner = newOwner;
         _mint(newOwner, 3, 1, "");
-        updateIndex(motherNumnber, uint128(amount), newOwner);
-        indexInformation[tokenIdIndex[token]].remainingAmount -= amount;
-        gGChildTokenIdInfo[IdToNumber[3]].units = uint128(amount);
-        //tokenIdInfo[2][motherNumnber].flowrate -=  gGChildTokenIdInfo[token].flowRate;
-        //_reduceFlow(flowOwner, gGChildTokenIdInfo[token].flowRate);
-        //should add logic to show start time to culculate total accumulation
+        updateIndex(token, uint128(amount), newOwner);
+        indexInformation[uint32(token)].remainingAmount -= amount;
+        gGChildTokenIdInfo[token_].units = uint128(amount);
         IdToNumber[3]++;
         
 
@@ -479,14 +527,15 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
             new bytes(0) // user data
         );
     }
-
+*/
+/*
     function updateIndex(uint token, uint128 units, address receiver) private {
         _host.callAgreement(
             _ida,
             abi.encodeWithSelector(
                 _ida.updateSubscription.selector,
                 _acceptedToken,
-                tokenIdIndex[token],
+                uint32(token),
                 receiver,
                 units,
                 new bytes(0) // placeholder ctx
@@ -518,11 +567,11 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
             //require(indexId == tokenIdIndex[tokenId], "DRT: publisher mismatch");
 
             if (approved) {
-                isSubscribing[context.msgSender /* subscriber */] = true;
+                isSubscribing[context.msgSender /* subscriber ] = true;
             }
         }
     }
-
+*/
     function _reduceFlow(address to, int96 flowRate) internal {
 
         if(to == address(this)) return;
@@ -561,7 +610,7 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
             "0x"
         );
     }
-     
+
     function _createFlow(address to, int96 flowRate) internal {
         if(to == address(this) || to == address(0)) return;
         _host.callAgreement(
@@ -646,83 +695,84 @@ contract TreeBudgetNFT is ERC1155 /*, Ownable*/, SuperAppBase {
         return(tokenParent,tokenOwner,flowrate,conceived,forSale,price,lifeSpan);
     }
     function gGchildInfo(uint id) external returns(
-        address tokenParent,
         address tokenOwner,
-        int96 amount,
         bool forSale,
         uint256 price,
         uint128 units
     ) {
-        tokenParent = gGChildTokenIdInfo[id].tokenParent;
         tokenOwner = gGChildTokenIdInfo[id].tokenOwner;
-        amount = gGChildTokenIdInfo[id].amount;
         forSale = gGChildTokenIdInfo[id].forSale;
         price = gGChildTokenIdInfo[id].price;
         units = gGChildTokenIdInfo[id].units;
-        return( tokenParent, tokenOwner, amount, forSale, price, units);
+        return(tokenOwner, forSale, price, units);
 
     }
+/*
     function beforeAgreementCreated(
         ISuperToken superToken,
         address agreementClass,
-        bytes32 /* agreementId*/ ,
-        bytes calldata /*agreementData*/,
-        bytes calldata /*ctx*/
+        bytes32 /* agreementId ,
+        bytes calldata /*agreementData,
+        bytes calldata /*ctx
     )
         external view override
         returns (bytes memory data)
     {
         require(superToken == _acceptedToken, "DRT: Unsupported cash token");
-        require(agreementClass == address(_ida), "DRT: Unsupported agreement");
         return new bytes(0);
-    }
 
-    function afterAgreementCreated(
+        
+    }
+/*    function afterAgreementCreated(
         ISuperToken superToken,
         address  agreementClass,
         bytes32 agreementId,
-        bytes calldata /*agreementData*/,
-        bytes calldata /*cbdata*/,
+        bytes calldata /*agreementData,
+        bytes calldata /*cbdata,
         bytes calldata ctx
     )
         external override
         returns(bytes memory newCtx)
-    {
-        require(agreementClass == address(_ida), "DRT: Unsupported agreement");
-        _checkSubscription(superToken, ctx, agreementId);
-        newCtx = ctx;
+    {   
+        if(agreementClass == address(_ida)) return new bytes(0);
+        else if (agreementClass == address(_ida)) {
+            _checkSubscription(superToken, ctx, agreementId);
+            newCtx = ctx;
+        }
     }
 
     function beforeAgreementUpdated(
         ISuperToken superToken,
         address agreementClass,
-        bytes32 /* agreementId */,
-        bytes calldata /*agreementData*/,
-        bytes calldata /*ctx*/
+        bytes32  agreementId ,
+        bytes calldata agreementData,
+        bytes calldata ctx
     )
         external view override
         returns (bytes memory data)
     {
         require(superToken == _acceptedToken, "DRT: Unsupported cash token");
-        require(agreementClass == address(_ida), "DRT: Unsupported agreement");
         return new bytes(0);
+        
     }
 
     function afterAgreementUpdated(
         ISuperToken superToken,
         address  agreementClass,
         bytes32 agreementId,
-        bytes calldata /*agreementData*/,
-        bytes calldata /*cbdata*/,
+        bytes calldata /*agreementData,
+        bytes calldata /*cbdata,
         bytes calldata ctx
     )
         external override
         returns(bytes memory newCtx)
 
     {
-        require(agreementClass == address(_ida), "DRT: Unsupported agreement");
-        _checkSubscription(superToken, ctx, agreementId);
-        newCtx = ctx;
+        if (agreementClass == address(_cfa)) return new bytes(0);
+        else if (agreementClass == address(_ida)) {
+            _checkSubscription(superToken, ctx, agreementId);
+            newCtx = ctx;
+        }
     }
     
 

@@ -228,6 +228,14 @@ def deployment_path():
         address_buyer
     )
     print(flo)
+
+    print("getting child token flow info to confirm that its flow was transfered...")
+    child_flow_inf = _cfa.getFlow(
+        daix_mumbai,
+        nft_address,
+        address_child
+    )
+    print(child_flow_inf)
     ##print("setting a token price")
     #nft_contract.setTokenPrice(
     #    1,

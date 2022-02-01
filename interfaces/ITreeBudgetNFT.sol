@@ -61,9 +61,7 @@ interface ITreeBudgetNFT {
     );
 
     function gGchildInfo(uint id) external returns(
-        address tokenParent,
         address tokenOwner,
-        int96 amount,
         bool forSale,
         uint256 price,
         uint128 units

@@ -4,26 +4,35 @@ pragma solidity ^0.8.0;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import {ISuperfluid, ISuperToken, ISuperApp, ISuperAgreement, SuperAppDefinitions} from "../supercon/interfaces/superfluid/ISuperfluid.sol";
+import {
+    ISuperfluid,
+    ISuperToken,
+    ISuperApp,
+    ISuperAgreement,
+    SuperAppDefinitions
+} from "@superfluid/interfaces/superfluid/ISuperfluid.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "../supercon/interfaces/agreements/IConstantFlowAgreementV1.sol";
+import "@superfluid/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-import {SuperAppBase} from "../supercon/apps/SuperAppBase.sol";
+import {SuperAppBase} from "@superfluid/apps/SuperAppBase.sol";
 import {ITreeBudgetNFT} from "../interfaces/ITreeBudgetNFT.sol";
 
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 
 contract FlowScource is SuperAppBase, ReentrancyGuard {
+
+
     mapping(address => mapping(uint => int96)) public AncestorIdFlowRate;
     mapping(address => int96) public addressTotalOut;
     mapping(address => uint) public stregth;
+    
     ISuperfluid private _host; // host
     IConstantFlowAgreementV1 private _cfa; // the stored constant flow agreement class address
     ISuperToken private _acceptedToken; // accepted token
@@ -49,8 +58,8 @@ contract FlowScource is SuperAppBase, ReentrancyGuard {
         _host = host;
         _cfa = cfa;
         _acceptedToken = acceptedToken;
-        _receiver = address(_addr);
         treeNftContract = _addr;
+        _receiver = address(treeNftContract);
 
         uint256 configWord = SuperAppDefinitions.APP_LEVEL_FINAL |
             SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
@@ -60,36 +69,30 @@ contract FlowScource is SuperAppBase, ReentrancyGuard {
         _host.registerApp(configWord);
     }
 
-    function getAncestorFlow(address ancestor) private returns(int96) {
+    function getAncestorFlow(address ancestor) private view returns(int96) {
         //getFlow(_aaceptedToke, ancestor, address(this));
         (,int96 inflowRate,,) = _cfa.getFlow(_acceptedToken, ancestor, address(this));
         return inflowRate;
         
     }
-/*
-    function deposit(uint256 amount) {
-        _acceptedToken.TransferFrom(msg.sender, address(this), amount);
-         _acceptedToken.upgrade(amount);
-    }
-*/
+    
     function fund(address to, /*uint id,*/ int96 _flowRate) external {
         int96 total = (addressTotalOut[msg.sender] + _flowRate);
-        //require(_acceptedToken.balanceOf(address(this)) > 0);
         //require(getAncestorFlow(msg.sender) >= total); //will check that the flow from the sender is sufficient
-        //_createFlow(address(treeNftContract), _flowRate);
-        _acceptedToken.transferFrom(msg.sender, address(treeNftContract), 200000000000000000000);//for testing and development purposes
+        //
+        _acceptedToken.transferFrom(msg.sender, address(this), 200000000000000000000);//for testing and development purposes
+        _createFlow(address(treeNftContract), _flowRate);
         uint256 id = treeNftContract.mintMother(to, _flowRate, "");
         treeNftContract.addTokenSource(id, msg.sender);
         AncestorIdFlowRate[msg.sender][id] = _flowRate;
         addressTotalOut[msg.sender] += _flowRate;
 
     }
-/*
-    function createMother(address to, int96 _flowRate) private returns (uint256){
-        bytes memory data = "";
-        return treeNftContract.mintMother(to, _flowRate, data);
+
+    function createFlow() public {
+        _createFlow(address(treeNftContract), int96(100000000000000));
     }
-*/
+
     function _createFlow(address to, int96 flowRate) internal {
         if(to == address(this) || to == address(0)) return;
         _host.callAgreement(
