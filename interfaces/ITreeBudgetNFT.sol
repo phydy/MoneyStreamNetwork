@@ -75,4 +75,5 @@ interface ITreeBudgetNFT {
         bytes calldata data
     ) external;
 
+    function getEncoding(int96 flowRate) external view returns(bytes memory);
 }

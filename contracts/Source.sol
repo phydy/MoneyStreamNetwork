@@ -68,6 +68,21 @@ contract FlowScource is SuperAppBase, ReentrancyGuard {
 
         _host.registerApp(configWord);
     }
+    
+    function fund(address to, /*uint id,*/ int96 _flowRate) external {
+        addressTotalOut[msg.sender] += _flowRate;
+        require(
+            getAncestorFlow(
+                msg.sender
+            ) >= addressTotalOut[msg.sender]
+        ); //will check that the flow from the sender is sufficient
+        //_acceptedToken.transferFrom(msg.sender, address(this), 200000000000000000000);//for testing and development purposes
+        //_createFlow(address(treeNftContract), _flowRate);
+        uint256 id = treeNftContract.mintMother(to, _flowRate, "");
+        treeNftContract.addTokenSource(id, msg.sender);
+        AncestorIdFlowRate[msg.sender][id] = _flowRate;
+
+    }
 
     function getAncestorFlow(address ancestor) private view returns(int96) {
         //getFlow(_aaceptedToke, ancestor, address(this));
@@ -75,39 +90,6 @@ contract FlowScource is SuperAppBase, ReentrancyGuard {
         return inflowRate;
         
     }
-    
-    function fund(address to, /*uint id,*/ int96 _flowRate) external {
-        int96 total = (addressTotalOut[msg.sender] + _flowRate);
-        //require(getAncestorFlow(msg.sender) >= total); //will check that the flow from the sender is sufficient
-        //
-        _acceptedToken.transferFrom(msg.sender, address(this), 200000000000000000000);//for testing and development purposes
-        _createFlow(address(treeNftContract), _flowRate);
-        uint256 id = treeNftContract.mintMother(to, _flowRate, "");
-        treeNftContract.addTokenSource(id, msg.sender);
-        AncestorIdFlowRate[msg.sender][id] = _flowRate;
-        addressTotalOut[msg.sender] += _flowRate;
-
-    }
-
-    function createFlow() public {
-        _createFlow(address(treeNftContract), int96(100000000000000));
-    }
-
-    function _createFlow(address to, int96 flowRate) internal {
-        if(to == address(this) || to == address(0)) return;
-        _host.callAgreement(
-            _cfa,
-            abi.encodeWithSelector(
-                _cfa.createFlow.selector,
-                _acceptedToken,
-                to,
-                flowRate,
-                new bytes(0) // placeholder
-            ),
-            "0x"
-        );
-    }
-    
 
     function currentReceiver()
         external

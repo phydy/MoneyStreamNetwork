@@ -1,6 +1,7 @@
 from operator import ne
 from brownie import accounts, TreeBudgetNFT, FlowScource, MarketPlace, network, config, convert, interface
 from brownie.network.gas.strategies import GasNowStrategy
+from brownie.network import web3
 
 network.max_fee("5 gwei")
 network.priority_fee("2 gwei")
@@ -25,10 +26,10 @@ ida_kovan = convert.to_address("0x556ba0b3296027Dd7BCEb603aE53dEc3Ac283d2b")
 daix_kovan = convert.to_address("0xe3cb950cb164a31c66e32c320a800d477019dcff")
 fdai_kova = convert.to_address("0xb64845d53a373d35160b72492818f0d2f51292c0")
 
-flow_to_mother = 100000000000000
-flow_to_child = 10000000000000
-flow_to_gchild = 1000000000000
-flow_to_ggchild = 100000000000
+flow_to_mother = "2 ether"
+flow_to_child = "1 ether"
+flow_to_gchild = "0.75 ether"
+flow_to_ggchild = "05 ether"
 
 address_deploy = convert.to_address("0xaC18157FFFdc96C9724eB1CF42eb05F8f70e645B")
 address_mother = convert.to_address("0xBCD9A216ba2c6346615B637Bb3A9CaC5117618e2")
@@ -40,6 +41,7 @@ address_buyer = convert.to_address("0xC225c9Af6F51f0e82b5dA08e1dd58854F5e76a38")
 dainormal = interface.IERC20(fdai_mumbai)
 acceptedToken = interface.IERC20(daix_mumbai)
 _cfa = interface.IConstantFlowAgreementV1(cfa_mumbai)
+_host = interface.ISuperfluid(host_mumbai)
 
 
 def get_account(role):
@@ -73,13 +75,13 @@ def get_flow(token, sender, _receiver, account):
     )
 
     
-def create_flow(token, receiver, flowRate, account):
-    return _cfa.createFlow(
-        token,
-        receiver,
-        flowRate,
-        "",
-        {"from": get_account(account)}
+def create_flow(token, ctx, flowRate):
+
+    return _host.callAgreement(
+        cfa_mumbai,#cfa addressl
+        ctx,
+        "",#user data
+        {"from": get_account(1)}
     )
 
 
@@ -121,7 +123,7 @@ def deployment_path():
     market_contract = (MarketPlace.deploy(
             nft_address,
             daix_mumbai,
-            #fdai_mumbai,
+            fdai_mumbai,
             {"from": get_account(1)}
         )
         if len(MarketPlace) <= 0
@@ -143,19 +145,23 @@ def deployment_path():
     ) #we add the flow source address to the nft contract
     ####nft_contract.transferOwnership(flowSource, {"from": get_account(1)})#we transfer ownership of the nft contract to the flowsource address to allow it to create mother tokens
     print(source_contract.currentReceiver())
-    print("testing flow recepient contracts") 
-    create_flow(
-        daix_mumbai,
-        nft_address,
-        convert.to_int("7 gwei"),
-        1
-    )
-    print("approving the flow source to spend super DAI")
-    acceptedToken.approve(
-        flowSource, convert.to_uint("200000000000000000000"),
-        {"from": get_account(1)}
-    ) #we approve the flow source to spend our DAIx
-    print("approved")
+    print("testing flow recepient contracts")
+    def create_flow():
+        cfaContext = nft_contract.getEncoding(convert.to_int("11 gwei"))
+        return _host.callAgreement(
+            cfa_mumbai,#cfa addressl
+            cfaContext,
+            "",#user data
+            {"from": get_account(1)}
+        )
+    create_flow()
+    print(get_flow(acceptedToken, flowSource, nft_address, 1))
+#    print("approving the flow source to spend super DAI")
+#    acceptedToken.approve(
+#        flowSource, convert.to_uint("200000000000000000000"),
+#        {"from": get_account(1)}
+#    ) #we approve the flow source to spend our DAIx
+#    print("approved")
     previous_balance = acceptedToken.balanceOf(nft_contract)
     print("previous balance:") 
     print(previous_balance)
@@ -168,17 +174,13 @@ def deployment_path():
     current_balance = acceptedToken.balanceOf(nft_contract)
     print("cheking reverse flow")
 
-    print("transfering funds to source")
-
-    acceptedToken.transfer(
-        flowSource,
-        20000000000000000000,
-        {"from": get_account(1)}
-    )
-
-
-    source_contract.createFlow({"from": get_account(1)})
-
+#    print("transfering funds to source")
+#
+#    acceptedToken.transfer(
+#        flowSource,
+#        20000000000000000000,
+#        {"from": get_account(1)}
+#    )
 
     print(get_flow(acceptedToken, flowSource, nft_address, 1))
     print("current balance:") 
@@ -289,45 +291,45 @@ def deployment_path():
         address_buyer
     )
     print(flo)
-    ##print("setting a token price")
-    #nft_contract.setTokenPrice(
-    #    1,
-    #    0,
-    #    100000000000000000000,
-    #    {"from": get_account(3)}
-    #)
-    #print("token price set")
-#
-    #print("buyer approving amount to spend")
-    #acceptedToken.approve(
-    #    market_address,
-    #    100000000000000000000,
-    #    {"from": get_account(6)}
-    #)
-    #print("approved")
-    #print("flow to buyer before tranfer")
-    #flow1_to_buyer = _cfa.getFlow(
-    #    daix_kovan,
-    #    nft_address,
-    #    address_buyer
-    #)
-    #print(flow1_to_buyer)
-    #print("Buying token")
-    #market_contract.buyToken(
-    #    1,
-    #    0,
-    #    {"from": get_account(6)}
-    #)
-    #print("token bought!")
-    #print("confirming flow to buyer")
-    #print("confirming")
-    ##flow_to_buyer = _cfa.getFlow(
-    ##    daix_kovan,
-    ##    nft_address,
-    ##    address_buyer
-    ##)
-    #print(flow_to_buyer)
-#
+    print("setting a token price")
+    nft_contract.setTokenPrice(
+        1,
+        0,
+        100000000000000000000,
+        {"from": get_account(3)}
+    )
+    print("token price set")
+
+    print("buyer approving amount to spend")
+    acceptedToken.approve(
+        market_address,
+        100000000000000000000,
+        {"from": get_account(6)}
+    )
+    print("approved")
+    print("flow to buyer before tranfer")
+    flow1_to_buyer = _cfa.getFlow(
+        daix_kovan,
+        nft_address,
+        address_buyer
+    )
+    print(flow1_to_buyer)
+    print("Buying token")
+    market_contract.buyToken(
+        1,
+        0,
+        {"from": get_account(6)}
+    )
+    print("token bought!")
+    print("confirming flow to buyer")
+    print("confirming")
+    flow_to_buyer = _cfa.getFlow(
+        daix_kovan,
+        nft_address,
+        address_buyer
+    )
+    print(flow_to_buyer)
+
 def main():
     deployment_path()
 

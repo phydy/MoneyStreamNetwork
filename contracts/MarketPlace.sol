@@ -192,7 +192,7 @@ contract MarketPlace is ReentrancyGuard {
             );
         }
     }
-
+/*
     function mintGreat(uint id, uint amount) public nonReentrant{
         treeNFT.mintGreatGChild(
             msg.sender,
@@ -200,8 +200,11 @@ contract MarketPlace is ReentrancyGuard {
             amount
         );
     }
-
-    function buyToken(uint token, uint id) public nonReentrant {
+*/
+    function buyToken(
+        uint token,
+        uint id
+    ) public nonReentrant {
         require(tokenIdInfo[token][id].active == true);
         bytes memory data = "";
         address from = tokenIdInfo[token][id].seller;
