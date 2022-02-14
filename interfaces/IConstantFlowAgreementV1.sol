@@ -2,7 +2,7 @@
 pragma solidity >=0.7.0;
 
 import { ISuperAgreement } from "@superfluid/interfaces/superfluid/ISuperAgreement.sol";
-import { ISuperfluidToken } from "@superfluid/supercon/interfaces/superfluid/ISuperfluidToken.sol";
+import { ISuperfluidToken } from "@superfluid/interfaces/superfluid/ISuperfluidToken.sol";
 
 
 /**
