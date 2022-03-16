@@ -79,8 +79,9 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 
 contract MarketPlace is ReentrancyGuard {
-    ITreeBudgetNFT treeNFT;
+    ITreeBudgetNFT private treeNFT;
     ISuperToken public DAI;
+    IERC20 public dai;
 
     struct Derivative {
         uint price;
@@ -90,29 +91,22 @@ contract MarketPlace is ReentrancyGuard {
         bool active;
     }
 
-    struct IndexInfo {
-        uint duration;
-        uint startTime;
-        uint actualAmount;
-        uint remainingAmount;
-    }
-
     mapping(uint => mapping (uint => Derivative)) public tokenIdInfo;
-    mapping(uint32 => IndexInfo) public indexInformation;
 
     event tokenAdded(address indexed from, uint256 indexed token, uint indexed id, int96 flowRate);
     constructor
     (
         ITreeBudgetNFT _treeAddress,
-        ISuperToken dai,
+        ISuperToken _dai,
         IERC20 fdai
     ) 
     {
         treeNFT = _treeAddress;
-        DAI = dai;
+        DAI = _dai;
+        dai = fdai;
     }
 
-    function toUint(int96 _number) public pure returns(uint256) {
+    function toUint(int96 _number) private pure returns(uint256) {
         int256 number = _number;
         return(uint256(number));
     }
@@ -121,17 +115,17 @@ contract MarketPlace is ReentrancyGuard {
         uint token,
         uint id
     ) public view returns(
-        uint,
-        int96,
-        uint,
-        address
+        uint price,
+        int96 flowRate,
+        uint duration,
+        address seller
     ) {
-        uint price = tokenIdInfo[token][id].price;
-        int96 flowRate = tokenIdInfo[token][id].flowRate;
-        uint duration = tokenIdInfo[token][id].duration;
-        address seller = tokenIdInfo[token][id].seller;
-        return (price, flowRate, duration, seller);
+        price = tokenIdInfo[token][id].price;
+        flowRate = tokenIdInfo[token][id].flowRate;
+        duration = tokenIdInfo[token][id].duration;
+        seller = tokenIdInfo[token][id].seller;
     }
+
     function addTokenDetails(
         uint token,
         uint id,
@@ -152,26 +146,13 @@ contract MarketPlace is ReentrancyGuard {
         emit tokenAdded(seller, token, id, flowRate_);
     }
 
-    function addIndex(
-        uint32 index,
-        uint256 duration,
-        uint256 actualAmount
-    ) external nonReentrant {
-        indexInformation[index] = IndexInfo(
-            duration,
-            actualAmount,
-            actualAmount,
-            block.timestamp
-        );
-    }
-
     function mintToken(uint token, uint id) public nonReentrant {
         require(token > 0 && token < 3, "wrong token");
         require(tokenIdInfo[token][id].active == false);
-        require(DAI.allowance(address(this), msg.sender)>=  tokenIdInfo[token][id].price, "allowance not enough");
+        require(dai.allowance(msg.sender, address(this))>=  tokenIdInfo[token][id].price, "allowance not enough");
         uint price = tokenIdInfo[token][id].price;
         address seller = tokenIdInfo[token][id].seller;
-        DAI.transferFrom(
+        dai.transferFrom(
             msg.sender,
             seller,
             price
@@ -192,15 +173,7 @@ contract MarketPlace is ReentrancyGuard {
             );
         }
     }
-/*
-    function mintGreat(uint id, uint amount) public nonReentrant{
-        treeNFT.mintGreatGChild(
-            msg.sender,
-            id,
-            amount
-        );
-    }
-*/
+
     function buyToken(
         uint token,
         uint id
@@ -209,7 +182,8 @@ contract MarketPlace is ReentrancyGuard {
         bytes memory data = "";
         address from = tokenIdInfo[token][id].seller;
         uint price = tokenIdInfo[token][id].price;
-        DAI.transferFrom(
+        require(dai.allowance(msg.sender, address(this)) >= price);
+        dai.transferFrom(
             msg.sender,
             from,
             price

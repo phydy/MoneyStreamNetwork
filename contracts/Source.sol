@@ -31,7 +31,7 @@ contract FlowScource is SuperAppBase, ReentrancyGuard {
 
     mapping(address => mapping(uint => int96)) public AncestorIdFlowRate;
     mapping(address => int96) public addressTotalOut;
-    mapping(address => uint) public stregth;
+    mapping(address => uint) public tokenDureation;
     
     ISuperfluid private _host; // host
     IConstantFlowAgreementV1 private _cfa; // the stored constant flow agreement class address
@@ -46,15 +46,6 @@ contract FlowScource is SuperAppBase, ReentrancyGuard {
         ISuperToken acceptedToken,
         ITreeBudgetNFT _addr
     ) {
-        require(address(host) != address(0), "host is zero address");
-        require(address(cfa) != address(0), "cfa is zero address");
-        require(
-            address(acceptedToken) != address(0),
-            "acceptedToken is zero address"
-        );
-        //require(address(receiver) != address(0), "receiver is zero address");
-        //require(!host.isApp(ISuperApp(receiver)), "receiver is an app");
-
         _host = host;
         _cfa = cfa;
         _acceptedToken = acceptedToken;
@@ -69,15 +60,13 @@ contract FlowScource is SuperAppBase, ReentrancyGuard {
         _host.registerApp(configWord);
     }
     
-    function fund(address to, /*uint id,*/ int96 _flowRate) external {
+    function createPayment(address to, int96 _flowRate) external {
         addressTotalOut[msg.sender] += _flowRate;
         require(
             getAncestorFlow(
                 msg.sender
             ) >= addressTotalOut[msg.sender]
         ); //will check that the flow from the sender is sufficient
-        //_acceptedToken.transferFrom(msg.sender, address(this), 200000000000000000000);//for testing and development purposes
-        //_createFlow(address(treeNftContract), _flowRate);
         uint256 id = treeNftContract.mintMother(to, _flowRate, "");
         treeNftContract.addTokenSource(id, msg.sender);
         AncestorIdFlowRate[msg.sender][id] = _flowRate;

@@ -75,9 +75,10 @@ wallets:
   from_mother: ${MOTHER}
   from_child: ${CHILD}
   from_gchild: ${GCHILD}
-  from__ggchild: S{GGCHILD}
+  from__ggchild: ${GGCHILD}
   from_buyer: ${BUYER}
   from_key: ${PRIVATE_KEY}
+  from_acc: ${ACC1}
   from_mnemonic: ${MNEMONIC}
 
   # could also do from_mnemonic, and you'd have to change the accounts.add to accounts.from_mnemonic

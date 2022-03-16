@@ -126,11 +126,10 @@ contract TreeBudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
     mapping(address => uint) public addressMotherId;//an address to the mother token id owned
     mapping(address => uint) public addressChildId;//an address to a child token Id owned
     mapping(address => uint) public addressGChildId;//an address to a Gchild token Id owned
-    mapping(address => uint) public addressGGchildId;
     
     //mapping(uint256 => uint32) public tokenIdIndex;//the id of the token that owns the index
 
-    mapping(uint32 => IndexInfo) public indexInformation;
+    //mapping(uint32 => IndexInfo) public indexInformation;
     struct TokenInfo {
         address tokenParent;
         address tokenOwner;
@@ -244,14 +243,14 @@ contract TreeBudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
     function generateToken(
         uint token_,
         uint256 price,
-        int96 flowRate,
-        uint256 _duration
+        int96 flowRate
     ) external returns(uint256) {
         require(token_ == 1 || token_ == 2);
         require(balanceOf(msg.sender, (token_ - 1)) == 1, "have a preceding token");
         (, int96 outFlowRate, , ) = _cfa.getFlow(_acceptedToken, address(this), msg.sender);
         require(outFlowRate > flowRate);
-        uint id = IdToNumber[token_];
+        uint256 _duration = price * toUnint(flowRate);
+        uint id = IdToNumber[token_] + 1;
         tokenIdInfo[token_][id] = TokenInfo(
             msg.sender,
             address(0),
@@ -261,12 +260,10 @@ contract TreeBudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
             price,
             _duration
         );
-        IdToNumber[token_]++;
-        uint amount = toUnint(flowRate);
         marketPlace.addTokenDetails(
             token_,
             id,
-            amount,
+            price,
             flowRate,
             _duration,
             msg.sender,
@@ -322,18 +319,7 @@ contract TreeBudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         super.safeTransferFrom(from, to, id, amount, data);
 
     }
-/*
-  {
-            //change receiver in index
-            uint tokenNumber = addressGGchildId[from];
-            uint motherNumber = addressGChildId[gGChildTokenIdInfo[tokenNumber].tokenParent];
-            uint128 units = gGChildTokenIdInfo[tokenNumber].units;
-            updateIndex(uint32(motherNumber), units , to);
-            updateIndex(uint32(motherNumber), 0, from);
-            gGChildTokenIdInfo[tokenNumber].tokenOwner = to;
 
-    }
-*/
     function checkFlowSource(address from) public view returns(int96) {
         (,int96 inflowRate,,) = _cfa.getFlow(_acceptedToken, from, address(this));
         return inflowRate;
@@ -355,9 +341,6 @@ contract TreeBudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
     {   
         require(account != msg.sender);
         require(account != address(this));
-        require(account != address(0));
-        require(balanceOf(account, 0) == 0, "only one allowed");
-        //require(checkFlowSource(msg.sender) >= _flowRate);
         idMotherInfo[addressMotherId[account]].flowrate = _flowRate;
         addressMotherId[account] = IdToNumber[0];
         _trackId(0, account);
@@ -383,11 +366,9 @@ contract TreeBudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         addressChildId[newOwner] = id;
         mothersTokens[motherNumnber].push(id);
         tokenIdInfo[1][id].tokenOwner = newOwner;
-        //_trackId(1, msg.sender);
         idMotherInfo[motherNumnber].flowrate -= tokenIdInfo[1][id].flowrate;
         _reduceFlow(flowOwner, tokenIdInfo[1][id].flowrate);
-        _createFlow(newOwner, tokenIdInfo[1][id].flowrate);
-
+        _createFlow(newOwner, tokenIdInfo[1][id].flowrate); 
         emit childIssued(flowOwner, addressChildId[newOwner], newOwner);
         
     }
@@ -531,7 +512,6 @@ contract TreeBudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         flowrate = idMotherInfo[id].flowrate;
         forSale = idMotherInfo[id].forSale;
         price = idMotherInfo[id].price;
-        return(tokenParent, tokenOwner, flowrate, price, forSale, lifeSpan);
     }
 
     function tokenInfo(
@@ -553,28 +533,6 @@ contract TreeBudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         forSale = tokenIdInfo[token][id_].forSale;
         price =tokenIdInfo[token][id_].price;
         lifeSpan = tokenIdInfo[token][id_].lifeSpan;
-        return(tokenParent,tokenOwner,flowrate,conceived,forSale,price,lifeSpan);
-    }
-    function gGchildInfo(uint id) external returns(
-        address tokenOwner,
-        bool forSale,
-        uint256 price,
-        uint128 units
-    ) {
-        tokenOwner = gGChildTokenIdInfo[id].tokenOwner;
-        forSale = gGChildTokenIdInfo[id].forSale;
-        price = gGChildTokenIdInfo[id].price;
-        units = gGChildTokenIdInfo[id].units;
-        return(tokenOwner, forSale, price, units);
 
     }
-
-/*
-    function mintBatch(address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
-        public
-        onlyOwner
-    {
-        _mintBatch(to, ids, amounts, data);
-    }
-*/
 }

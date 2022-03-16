@@ -2,6 +2,7 @@ from operator import ne
 from brownie import accounts, TreeBudgetNFT, FlowScource, MarketPlace, network, config, convert, interface
 from brownie.network.gas.strategies import GasNowStrategy
 from brownie.network import web3
+from eth_utils import to_bytes
 
 network.max_fee("5 gwei")
 network.priority_fee("2 gwei")
@@ -16,8 +17,8 @@ fdai = convert.to_address("0x88271d333C72e51516B67f5567c728E702b3eeE8")
 host_mumbai = convert.to_address("0xEB796bdb90fFA0f28255275e16936D25d3418603")
 cfa_mumbai = convert.to_address("0x49e565Ed1bdc17F3d220f72DF0857C26FA83F873")
 ida_mumbai = convert.to_address("0x804348D4960a61f2d5F9ce9103027A3E849E09b8")
-daix_mumbai = convert.to_address("0x5D8B4C2554aeB7e86F387B4d6c00Ac33499Ed01f")
-fdai_mumbai = convert.to_address("0xbe91b305ebdb0253abafe1da0cdfb0fd9d4fd4b8")
+daix_mumbai = convert.to_address("0x06577b0B09e69148A45b866a0dE6643b6caC40Af")
+fdai_mumbai = convert.to_address("0x001b3b4d0f3714ca98ba10f6042daebf0b1b7b6f")
 
 
 host_kovan = convert.to_address("0xF0d7d1D47109bA426B9D8A3Cde1941327af1eea3")
@@ -26,10 +27,10 @@ ida_kovan = convert.to_address("0x556ba0b3296027Dd7BCEb603aE53dEc3Ac283d2b")
 daix_kovan = convert.to_address("0xe3cb950cb164a31c66e32c320a800d477019dcff")
 fdai_kova = convert.to_address("0xb64845d53a373d35160b72492818f0d2f51292c0")
 
-flow_to_mother = "2 ether"
-flow_to_child = "1 ether"
-flow_to_gchild = "0.75 ether"
-flow_to_ggchild = "05 ether"
+flow_to_mother = "0.7 ether"
+flow_to_child = "0.5 ether"
+flow_to_gchild = "0.05 ether"
+flow_to_ggchild = "5 ether"
 
 address_deploy = convert.to_address("0xaC18157FFFdc96C9724eB1CF42eb05F8f70e645B")
 address_mother = convert.to_address("0xBCD9A216ba2c6346615B637Bb3A9CaC5117618e2")
@@ -55,8 +56,10 @@ def get_account(role):
         return accounts.add(config["wallets"]["from_gchild"])
     if role ==5:
         return accounts.add(config["wallets"]["from_ggchild"])
-    elif role ==6:
+    if role ==6:
         return accounts.add(config["wallets"]["from_buyer"])
+    elif role ==6:
+        return accounts.add(config["wallets"]["from_acc"])
 
 def transferSuperTokens(sender, receiver):
     acceptedToken.transferFrom(
@@ -66,12 +69,11 @@ def transferSuperTokens(sender, receiver):
         {"from": get_account(1)}
     )
 
-def get_flow(token, sender, _receiver, account):
+def get_flow(token, sender, _receiver):
     return _cfa.getFlow(
         token,
         sender,
-        _receiver,
-         {"from": get_account(account)}
+        _receiver
     )
 
     
@@ -147,28 +149,36 @@ def deployment_path():
     print(source_contract.currentReceiver())
     print("testing flow recepient contracts")
     def create_flow():
-        cfaContext = nft_contract.getEncoding(convert.to_int("11 gwei"))
-        return _host.callAgreement(
+        cfaContext = nft_contract.getEncoding((flow_to_mother * 2))
+        _host.callAgreement(
             cfa_mumbai,#cfa addressl
             cfaContext,
             "",#user data
             {"from": get_account(1)}
         )
     create_flow()
-    print(get_flow(acceptedToken, flowSource, nft_address, 1))
+    print(get_flow(acceptedToken, get_account(1), flowSource))
+    #_cfa.createFlow(acceptedToken, flowSource, 10000000, to_bytes(""), {"from": get_account(1)})
+    print(get_flow(acceptedToken, flowSource, nft_address))
 #    print("approving the flow source to spend super DAI")
 #    acceptedToken.approve(
 #        flowSource, convert.to_uint("200000000000000000000"),
 #        {"from": get_account(1)}
 #    ) #we approve the flow source to spend our DAIx
 #    print("approved")
-    previous_balance = acceptedToken.balanceOf(nft_contract)
+    previous_balance = acceptedToken.balanceOf(nft_address)
+    acceptedToken.transfer(
+        nft_address,
+        20000000000000000000,
+        {"from": get_account(1)}
+    )
+
     print("previous balance:") 
     print(previous_balance)
     print("minting mother token...")
-    source_contract.fund(
+    source_contract.createPayment(
         address_mother,
-        flow_to_mother,
+        700000000000000000,
         {"from": get_account(1)}
     )
     current_balance = acceptedToken.balanceOf(nft_contract)
@@ -182,7 +192,8 @@ def deployment_path():
 #        {"from": get_account(1)}
 #    )
 
-    print(get_flow(acceptedToken, flowSource, nft_address, 1))
+    print(get_flow(acceptedToken, flowSource, nft_address))
+    print(get_flow(acceptedToken, get_account(1), flowSource))
     print("current balance:") 
     print(current_balance)
     print("getting mother token flow info...")
@@ -198,14 +209,14 @@ def deployment_path():
 
     nft_contract.generateToken(
         1,
-        10000000000000000000,
+        "100 ether",
         flow_to_child,
         36000,
         {"from": get_account(2)}
     )
     print("child token generated")
 
-    daiad = market_contract._dai()
+    daiad = market_contract.dai()
     tran = interface.IERC20(daiad)
     acceptedToken.approve(
         market_address,
@@ -242,7 +253,7 @@ def deployment_path():
     print("generating grand child token...")
     nft_contract.generateToken(
         2,
-        10000000000000000000,
+        "100 ether",
         flow_to_gchild,
         0,
         {"from": get_account(3)}

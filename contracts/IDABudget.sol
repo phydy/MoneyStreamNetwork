@@ -113,13 +113,11 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
     uint256 public constant MOTHER = 0;
     uint256 public constant CHILD = 1;
     uint256 public constant GRANDCHILD = 2;
-    uint256 public constant GREATGRANDCHILD = 3;
 
 
     mapping(uint => uint) private IdToNumber; //tracks the number ids of all tokens
     mapping(uint => uint[]) public mothersTokens; //an array of ids of all tokens linked to the mother ie child tokens
     mapping(uint => uint[]) public childsTokens; //an array of ids of all tokens linked to the child ie grand child tokens
-    mapping(uint => uint[]) public gChildsTokens; //an array of ids of all tokens linked to the gchild ie gGrand child tokens
 
     mapping(address => uint32) public souceToIndex;
 
@@ -127,8 +125,6 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
 
     mapping(address => uint) public addressMotherId;//an address to the mother token id owned
     mapping(address => uint) public addressChildId;//an address to a child token Id owned
-    mapping(address => uint) public addressGChildId;//an address to a Gchild token Id owned
-    mapping(address => uint) public addressGGchildId;
     
     mapping(uint256 => uint32) public tokenIdIndex;//the id of the token that owns the index
 
@@ -157,36 +153,15 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         uint totalOwed;
     }
 
-    struct GGChildInfo {
-        uint32 index;
-        address tokenOwner;
-        bool forSale;
-        uint256 price;
-        uint128 units;
-
-    }
-
     struct IndexInfo {
         uint duration;
         uint startTime;
         uint actualAmount;
     }
 
-    mapping(uint => MotherInfo) private idMotherInfo;//mother tpken information
-    mapping(uint => mapping(uint => TokenInfo)) public tokenIdInfo; //child and grandchild information
-    mapping(uint => GGChildInfo) public gGChildTokenIdInfo;//great-grandchild information
+    mapping(uint => MotherInfo) public idMotherInfo;//mother tpken information
+    mapping(uint => TokenInfo) public tokenIdInfo; //child and grandchild information
 
-    //for functions that can only get called from the source contract
-    modifier onlySource {
-        require(msg.sender == flowSource, "Only source");
-        _;
-    }
-
-    //for functions that can only be called from the market place 
-    modifier onlyMarket {
-        require(msg.sender == address(marketPlace), "Only source");
-        _;
-    }
     
     struct TreeSource {
         int96 totalFlow;
@@ -200,7 +175,6 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
 
     event childIssued(address indexed _reciever, uint id, address issuer);
     event motherIssued(address indexed _reciever, uint id, address issuer);
-    event gChildIssued(address indexed _reciever, uint id, address issuer);
 
 
 
@@ -246,10 +220,10 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         uint256 amount
     ) external nonReentrant {
         require(token == 1 || token == 2, "wrong token");
-        require(tokenIdInfo[token][id].tokenOwner == msg.sender);
-        tokenIdInfo[token][id].forSale = true;
-        tokenIdInfo[token][id].price = amount;
-        uint128 units = tokenIdInfo[token][id].units;
+        require(tokenIdInfo[id].tokenOwner == msg.sender);
+        tokenIdInfo[id].forSale = true;
+        tokenIdInfo[id].price = amount;
+        uint128 units = tokenIdInfo[id].units;
         uint duration = amount/toUnint(flowRate);
         marketPlace.addTokenDetails(
             token,
@@ -266,17 +240,15 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
 
     }
     function generateToken(
-        uint token_,
         uint256 price,
         uint128 units,
         uint256 _duration
     ) external returns(uint256) {
-        require(token_ == 1 || token_ == 2);
-        require(balanceOf(msg.sender, (token_ - 1)) == 1, "have a preceding token");
+        require(balanceOf(msg.sender, 0) == 1, "have a preceding token");
         (, int96 outFlowRate, , ) = _cfa.getFlow(_acceptedToken, address(this), msg.sender);
         require(outFlowRate > flowRate);
-        uint id = IdToNumber[token_];
-        tokenIdInfo[token_][id] = TokenInfo(
+        uint id = IdToNumber[1];
+        tokenIdInfo[id] = TokenInfo(
             msg.sender,
             address(0),
             units,
@@ -285,10 +257,10 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
             price,
             _duration
         );
-        IdToNumber[token_]++;
+        IdToNumber[1]++;
         uint amount = toUnint(flowRate);
         marketPlace.addTokenDetails(
-            token_,
+            1,
             id,
             amount,
             units,
@@ -358,25 +330,16 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         uint256 amount,
         bytes calldata data
     ) public override {
-        require(id == 1 || id ==2);
+        require(id == 1);
         require(amount == 1);
-        if (id == 1 ) {
-            uint tokenNumber = addressChildId[from];
-            _reduceFlow(from, tokenIdInfo[id][tokenNumber].flowrate);
-            _increaseFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
-            tokenIdInfo[id][tokenNumber].tokenOwner = to;
-            addressChildId[to] = tokenNumber;
-            delete addressChildId[from];
-        }
-        if (id == 2 ) {
-            uint tokenNumber = addressGChildId[from];
-            _reduceFlow(from, tokenIdInfo[id][tokenNumber].flowrate);
-            _increaseFlow(to, tokenIdInfo[id][tokenNumber].flowrate);
-            tokenIdInfo[id][tokenNumber].tokenOwner = to;
-            addressGChildId[to] = tokenNumber;
-            delete addressGChildId[from];
-        }
-        super.safeTransferFrom(from, to, id, amount, data);
+        uint tokenNumber = addressChildId[from];
+        _reduceFlow(from, tokenIdInfo[tokenNumber].flowrate);
+        _increaseFlow(to, tokenIdInfo[tokenNumber].flowrate);
+        tokenIdInfo[1][tokenNumber].tokenOwner = to;
+        addressChildId[to] = tokenNumber;
+        delete addressChildId[from];
+         delete addressGChildId[from];
+        super.safeTransferFrom(from, to, 1, amount, data);
 
     }
 /*
@@ -411,8 +374,6 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         returns(uint256)
     {   
         require(account != msg.sender);
-        require(account != address(this));
-        require(account != address(0));
         require(balanceOf(account, 0) == 0, "only one allowed");
         //require(checkFlowSource(msg.sender) >= _flowRate);
         idMotherInfo[addressMotherId[account]].flowrate = _flowRate;
@@ -431,75 +392,22 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         bytes memory data
     )
         external onlyMarket nonReentrant
-    {   require(tokenIdInfo[1][id].conceived == true, "not available");
-        address flowOwner = tokenIdInfo[1][id].tokenParent;
+    {   require(tokenIdInfo[id].conceived == true, "not available");
+        address flowOwner = tokenIdInfo[id].tokenParent;
         uint motherNumnber = addressMotherId[flowOwner];
         require(newOwner != flowOwner, "owner");
-        require(idMotherInfo[motherNumnber].units > tokenIdInfo[1][id].units, "isuficient fr"); //@dev: flowrate from mother should not be zero
+        require(idMotherInfo[motherNumnber].units > tokenIdInfo[id].units, "isuficient fr"); //@dev: flowrate from mother should not be zero
         _mint(newOwner, 1, 1, data);
         addressChildId[newOwner] = id;
         mothersTokens[motherNumnber].push(id);
-        tokenIdInfo[1][id].tokenOwner = newOwner;
+        tokenIdInfo[id].tokenOwner = newOwner;
         //_trackId(1, msg.sender);
-        idMotherInfo[motherNumnber].units -= tokenIdInfo[1][id].units;
+        idMotherInfo[motherNumnber].units -= tokenIdInfo[id].units;
 
         emit childIssued(flowOwner, addressChildId[newOwner], newOwner);
         
     }
 
-    function mintGChild(
-        address newOwner,
-        uint id,
-        bytes memory data
-    )
-        external onlyMarket nonReentrant
-    {   
-        require(tokenIdInfo[2][id].conceived == true, "not available");
-        address flowOwner = tokenIdInfo[2][id].tokenParent;
-        uint motherNumnber = addressChildId[flowOwner];
-        require(newOwner != flowOwner);
-        require(
-            tokenIdInfo[1][motherNumnber].units
-            >
-            tokenIdInfo[2][id].units, "isuficient fr"
-        ); //@dev: flowrate from mother should not be zero
-        _mint(newOwner, 2, 1, data);
-        addressGChildId[newOwner] = id;
-        childsTokens[motherNumnber].push(id);
-        tokenIdInfo[2][id].tokenOwner = newOwner;
-        //_trackId(2, msg.sender);
-        tokenIdInfo[1][motherNumnber].units -= tokenIdInfo[2][id].flowrate;
-
-        emit childIssued(flowOwner, addressGChildId[newOwner], newOwner);
-        
-    }
-
-    function mintGreatGChild(
-        address newOwner,
-        uint token,
-        uint amount
-    ) external onlyMarket nonReentrant
-    {
-        require(
-            indexInformation[uint32(token)].remainingAmount > 0
-            &&
-            amount <= indexInformation[uint32(token)].remainingAmount,
-            "index full"
-        );
-        uint token_ = IdToNumber[3];
-        address flowOwner = tokenIdInfo[2][token].tokenParent;
-        //uint motherNumnber = addressGChildId[flowOwner];
-        addressGGchildId[newOwner] = token_;
-        gChildsTokens[token].push(token_);
-        gGChildTokenIdInfo[token_].tokenOwner = newOwner;
-        _mint(newOwner, 3, 1, "");
-        updateIndex(token, uint128(amount), newOwner);
-        indexInformation[uint32(token)].remainingAmount -= amount;
-        gGChildTokenIdInfo[token_].units = uint128(amount);
-        IdToNumber[3]++;
-        
-
-    }
 
     function createIndex_( uint32 index) private {
         _host.callAgreement(
@@ -572,8 +480,17 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         }
     }
 
+    //for functions that can only get called from the source contract
+    modifier onlySource {
+        require(msg.sender == flowSource, "Only source");
+        _;
+    }
 
-
+    //for functions that can only be called from the market place 
+    modifier onlyMarket {
+        require(msg.sender == address(marketPlace), "Only source");
+        _;
+    }
     function motherInfo(uint id) external view returns(
         address tokenParent,
         address tokenOwner,
@@ -589,11 +506,10 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         units = idMotherInfo[id].units;
         forSale = idMotherInfo[id].forSale;
         price = idMotherInfo[id].price;
-        return(tokenParent, tokenOwner, units, price, forSale, lifeSpan);
+
     }
 
     function tokenInfo(
-        uint token,
         uint id_
     ) external view returns(
         address tokenParent,
@@ -604,29 +520,15 @@ contract IDABudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         uint256 price,
         uint lifeSpan
     ) {
-        tokenParent = tokenIdInfo[token][id_].tokenParent;
-        tokenOwner = tokenIdInfo[token][id_].tokenOwner;
-        units =tokenIdInfo[token][id_].units;
-        conceived = tokenIdInfo[token][id_].conceived;
-        forSale = tokenIdInfo[token][id_].forSale;
-        price =tokenIdInfo[token][id_].price;
-        lifeSpan = tokenIdInfo[token][id_].lifeSpan;
+        tokenParent = tokenIdInfo[id_].tokenParent;
+        tokenOwner = tokenIdInfo[id_].tokenOwner;
+        units = tokenIdInfo[id_].units;
+        conceived = tokenIdInfo[id_].conceived;
+        forSale = tokenIdInfo[id_].forSale;
+        price = tokenIdInfo[id_].price;
+        lifeSpan = tokenIdInfo[id_].lifeSpan;
     }
 
-
-    function gGchildInfo(uint id) external returns(
-        address tokenOwner,
-        bool forSale,
-        uint256 price,
-        uint128 units
-    ) {
-        tokenOwner = gGChildTokenIdInfo[id].tokenOwner;
-        forSale = gGChildTokenIdInfo[id].forSale;
-        price = gGChildTokenIdInfo[id].price;
-        units = gGChildTokenIdInfo[id].units;
-        return(tokenOwner, forSale, price, units);
-
-    }
 
     function beforeAgreementCreated(
         ISuperToken superToken,
