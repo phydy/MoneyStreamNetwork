@@ -194,16 +194,7 @@ contract TreeBudgetNFT is ERC1155 , Ownable, ReentrancyGuard {
         require(address(acceptedToken) != address(0));
         _host = host;
         _cfa = cfa;
-        //_ida =ida;
         _acceptedToken = acceptedToken;
-/*
-        uint256 configWord =
-            SuperAppDefinitions.APP_LEVEL_FINAL |
-            SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP |
-            SuperAppDefinitions.AFTER_AGREEMENT_TERMINATED_NOOP;
-
-        _host.registerApp(configWord);
-    */
     }
 
     function addFlowSource(address _flowSource) external onlyOwner {

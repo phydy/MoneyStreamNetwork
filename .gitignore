@@ -6,3 +6,4 @@ build/
 reports/
 tests/test_deployments.py
 client/
+node_modules

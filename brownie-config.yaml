@@ -14,7 +14,7 @@ compiler:
       - '@chainlink=smartcontractkit/chainlink-brownie-contracts@0.2.1'
       - '@openzeppelin=OpenZeppelin/openzeppelin-contracts@4.4.1'
       #- '@superfluid=superfluid-finance/protocol-monorepo@0.1.2'
-      - '@superfluid=/usr/local/lib/node_modules/@superfluid-finance/ethereum-contracts/contracts'
+      - '@superfluid=./node_modules/@superfluid-finance/ethereum-contracts/contracts'
   default: development
   development:
     keyhash: '0x6c3699283bda56ad74f6b855546325b68d482e983852a7a82979cc4807b641f4'

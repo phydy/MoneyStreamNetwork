@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@superfluid-finance/ethereum-contracts": "^1.1.1"
+  }
+}
